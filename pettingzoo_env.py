@@ -75,8 +75,6 @@ class CustomEnvironment(ParallelEnv):
 
         # print("started reset")
         self.agents = self.possible_agents[:]
-        # self._agent_selector = agent_selector(self.agents)
-        # self.agent_selection = self._agent_selector.next()
 
         self.timestep = 0
         self.observations = {

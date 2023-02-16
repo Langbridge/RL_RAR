@@ -12,7 +12,7 @@ from ray.tune.registry import register_env
 from pettingzoo.classic import rps_v2
 
 config = {
-    'num_agents': 1,
+    'num_agents': 2,
     'map_size': 3,
     'num_iters': 1_000_000,
     # 'render_mode': 'human'
@@ -42,10 +42,10 @@ if __name__ == "__main__":
     env_creator = lambda config: CustomEnvironment(**config)
     register_env('simple', lambda config: ParallelPettingZooEnv(env_creator(config)))
 
-    # env_creator = lambda config: rps_v2.env()
-    # register_env('simple', lambda config: PettingZooEnv(env_creator(config)))
+    # env_creator = lambda config: rps_v2.parallel_env()
+    # register_env('simple', lambda config: ParallelPettingZooEnv(env_creator(config)))
 
-    algo = ppo.PPOConfig().environment(env='simple', env_config=config).framework(framework='torch').training(gamma=0.9, lr=0.01, kl_coeff=0.3).rollouts(num_rollout_workers=1).build()
+    algo = ppo.PPOConfig().environment(env='simple', env_config=config).framework(framework='torch').build()
     for i in range(5):
         results = algo.train()
         print(f"Iter: {i}; avg. reward={results['episode_reward_mean']}")
