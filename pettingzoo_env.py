@@ -77,17 +77,17 @@ class CustomEnvironment(ParallelEnv):
         self.agents = self.possible_agents[:]
 
         self.timestep = 0
-        self.observations = {
-            agent: {
-                'pollution': np.zeros(shape=(self.num_nodes,)),
-                'action_mask': np.zeros(shape=(self.num_nodes,))
-            } for agent in self.agents
-        }
         self.goals = {
             agent: random.sample(self.G.nodes(), 2) for agent in self.agents
         }
         self.positions = {
             agent: self.goals[agent][0] for agent in self.agents
+        }
+        self.observations = {
+            agent: {
+                'pollution': np.zeros(shape=(self.num_nodes,)),
+                'action_mask': self._get_action_mask(self.positions[agent])
+            } for agent in self.agents
         }
         self.pollution = {
             agent: 0 for agent in self.agents
@@ -110,7 +110,6 @@ class CustomEnvironment(ParallelEnv):
         - infos
         dicts where each dict looks like {agent_1: item_1, agent_2: item_2}
         """
-        print(actions)
         # If a user passes in actions with no agents, then just return empty observations, etc.
         if not actions:
             self.agents = []
@@ -127,8 +126,8 @@ class CustomEnvironment(ParallelEnv):
             at_goal = (actions[agent] == self.goals[agent][1])
             rewards[agent] = self._get_reward(self.pollution[agent], at_goal)
             terminations[agent] = at_goal
-            if at_goal:
-                print(f"{agent} reached goal in {self.timestep} steps with {self.pollution[agent]:.2f} ug")
+            # if at_goal:
+            #     print(f"{agent} reached goal in {self.timestep} steps with {self.pollution[agent]:.2f} ug")
 
         self.timestep += 1
         env_truncation = self.timestep >= self.num_iters
@@ -158,7 +157,7 @@ class CustomEnvironment(ParallelEnv):
                     self.agents.remove(agent)
 
         # print(self.observations, rewards, terminations, truncations, infos)
-        print(rewards)
+        # print(rewards)
 
         return self.observations, rewards, terminations, truncations, infos
     
@@ -184,7 +183,7 @@ class CustomEnvironment(ParallelEnv):
         
         else:
             # return the full array of pollution values for traversal from curr_node
-            observation = np.array([np.inf]*self.num_nodes)
+            observation = np.array([1e8]*self.num_nodes)
             for (x, y) in self.G.edges(self.positions[agent]):
                 observation[y] = self._get_pollution(agent, action=y)
             return observation
