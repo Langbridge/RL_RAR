@@ -14,9 +14,9 @@ from pettingzoo.classic import rps_v2
 from ray import tune, air
 
 env_config = {
-    'num_agents': 10,
-    'map_size': 10,
-    'num_iters': 1_000_000,
+    'num_agents': 2,
+    'map_size': 4,
+    'num_iters': 100,
     # 'render_mode': 'human'
 }
 
@@ -27,10 +27,10 @@ if __name__ == "__main__":
     register_env('simple', lambda config: ParallelPettingZooEnv(env_creator(config)))
 
     algo = ppo.PPOConfig().environment(env='simple', env_config=env_config).framework(framework='torch').build()
-    for i in range(100):
+    for i in range(500):
         results = algo.train()
         print(f"Iter: {i}; avg. reward={results['episode_reward_mean']}")
 
-        if i % 2 == 0:
+        if (i+1) % 10 == 0:
             print("saving..")
             print(algo.save("/tmp/rllib_checkpoint"))

@@ -15,7 +15,7 @@ class CustomEnvironment(ParallelEnv):
     ambient_pm = 10
     velocity = 20
 
-    def __init__(self, map_size=5, num_agents=2, num_iters=None, render_mode=None):
+    def __init__(self, map_size=5, num_agents=2, num_iters=None, render_mode=None, figpath='figures'):
         """
         The init method takes in environment arguments and should define the following attributes:
         - possible_agents
@@ -50,7 +50,7 @@ class CustomEnvironment(ParallelEnv):
         )
         self.render_mode = render_mode
         if self.render_mode == "human":
-            self.pos = nx.spring_layout(self.G, iterations=250)
+            self.pos = nx.spring_layout(self.G, iterations=1_500)
 
         print(f"Initialised env with {num_agents} agents on a {map_size}x{map_size} graph.")
 
@@ -58,7 +58,7 @@ class CustomEnvironment(ParallelEnv):
     def observation_space(self, agent):
         return Dict({
             "pollution": Box(low=0, high=np.inf, shape=(self.num_nodes,)),
-            "action_mask": Box(low=0, high=1, shape=(self.num_nodes,), dtype=int)
+        #     "action_mask": Box(low=0, high=1, shape=(self.num_nodes,), dtype=int)
         })
 
     @functools.lru_cache(maxsize=None)
@@ -81,12 +81,15 @@ class CustomEnvironment(ParallelEnv):
         self.observations = {
             agent: {
                 'pollution': self._get_pollution(agent),
-                'action_mask': self._get_action_mask(self.positions[agent])
+                # 'action_mask': self._get_action_mask(self.positions[agent])
             } for agent in self.agents
         }
         self.pollution = {
             agent: 0 for agent in self.agents
         }
+
+        if self.render_mode:
+            self.render()
 
         if not return_info:
             return self.observations
@@ -114,14 +117,18 @@ class CustomEnvironment(ParallelEnv):
         rewards = {}
         terminations = {}
         for agent in self.agents:
-            self.positions[agent] = actions[agent]
-            self.pollution[agent] += self._get_pollution(agent, action=actions[agent])
+            if self._get_action_mask(self.positions[agent])[actions[agent]]:
+                self.positions[agent] = actions[agent]
+                # self.pollution[agent] += self._get_pollution(agent, action=actions[agent])
+                self.pollution[agent] += self.observations[agent]['pollution'][actions[agent]]
 
-            at_goal = (actions[agent] == self.goals[agent][1])
-            rewards[agent] = self._get_reward(self.pollution[agent], at_goal)
-            terminations[agent] = at_goal
-            # if at_goal:
-            #     print(f"{agent} reached goal in {self.timestep} steps with {self.pollution[agent]:.2f} ug")
+                at_goal = (actions[agent] == self.goals[agent][1])
+                rewards[agent] = self._get_reward(self.pollution[agent], at_goal)
+                terminations[agent] = at_goal
+            else:
+                # if invalid move, don't move agent
+                self.pollution[agent] += self.observations[agent]['pollution'][actions[agent]] # large const (1e8)
+                rewards[agent] = self._get_reward(self.pollution[agent], False)
 
         self.timestep += 1
         env_truncation = self.timestep >= self.num_iters
@@ -131,7 +138,7 @@ class CustomEnvironment(ParallelEnv):
         self.observations = {
             agent: {
                 'pollution': self._get_pollution(agent),
-                'action_mask': self._get_action_mask(self.positions[agent])
+                # 'action_mask': self._get_action_mask(self.positions[agent])
             } for agent in self.agents
         }
 
@@ -141,7 +148,7 @@ class CustomEnvironment(ParallelEnv):
         infos = {agent: {} for agent in self.agents}
 
         if self.render_mode:
-            self.render()
+            self.render(0, rewards)
 
         if env_truncation:
             self.agents = []
@@ -167,7 +174,7 @@ class CustomEnvironment(ParallelEnv):
     def _get_pollution(self, agent, action=None):
         heights = nx.get_node_attributes(self.G, 'h')
 
-        if action is not None:
+        if action is not None and self._get_action_mask(self.positions[agent])[action]:
             # return a single value for pollution corresponding to an action (ie edge traversal)
             dh = heights[self.positions[agent]] - heights[action]
             dl = 100
@@ -183,9 +190,9 @@ class CustomEnvironment(ParallelEnv):
             return observation
         
     def _get_reward(self, pollution, at_goal):
-        return -0.1*self.timestep + -1*pollution + 100*int(at_goal)
+        return -pollution + 100*int(at_goal)
     
-    def render(self):
+    def render(self, agent_idx=0, reward=None):
         if self.render_mode == "ascii":
             print("Step ", self.timestep, self.positions, self.pollution)
 
@@ -198,7 +205,9 @@ class CustomEnvironment(ParallelEnv):
                 "width": 5,
             }
             plt.figure(figsize=(15,15))
+            plt.title(f'Step {self.timestep}, {self.possible_agents[agent_idx]} reward {reward[self.possible_agents[agent_idx]]}')
             nx.draw_networkx(self.G, pos=self.pos, node_color='white', **options)
-            nx.draw_networkx(self.G, nodelist=[self.positions['cyclist_0']], pos=self.pos, node_color='blue', alpha=0.4, label='Start', **options)
-            nx.draw_networkx(self.G, nodelist=self.goals['cyclist_0'], pos=self.pos, node_color='green', alpha=0.4, label='Start & End', **options)
-            plt.savefig(f'figures/img_{self.timestep}')
+            nx.draw_networkx(self.G, nodelist=[self.positions[self.possible_agents[agent_idx]]], pos=self.pos, node_color='blue', alpha=0.4, label='Cyclist', **options)
+            nx.draw_networkx(self.G, nodelist=[self.goals[self.possible_agents[agent_idx]][1]], pos=self.pos, node_color='green', alpha=0.4, label='Goal', **options)
+            plt.savefig(f'{self.figpath}/img_{self.timestep}')
+            plt.close()

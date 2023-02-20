@@ -44,44 +44,63 @@ class Agent(nn.Module):
     def get_action_and_value(self, x, action_mask, action=None):
         hidden = self.forward(x)
         logits = self.actor(hidden)
-        logits = torch.where(torch.tensor(action_mask.astype(bool)), logits, -1e8)
+        logits = torch.where(action_mask, logits, -1e8)
 
         probs = Categorical(logits=logits)
         if action is None:
             action = probs.sample()
+        print(logits)
+        print(probs.probs)
+        print(probs.log_prob(action))
         # [agents]
         return action, probs.log_prob(action), probs.entropy(), self.critic(hidden)
 
 
-def batchify_obs(new_obs, device):
+def batchify_obs(env, new_obs, device):
     """Converts PZ style observations to batch of torch arrays."""
-    # convert to list of np arrays
-    obs = np.stack([new_obs[a]['pollution'] for a in new_obs], axis=0)
+    obs = []
+    masks = []
+    for agent in env.possible_agents:
+        if agent in env.agents:
+            obs.append(new_obs[agent]['pollution'])
+            masks.append(new_obs[agent]['action_mask'])
+        else:
+            obs.append(np.zeros_like(new_obs[env.agents[0]]['pollution']))
+            masks.append(np.zeros_like(new_obs[env.agents[0]]['action_mask']))
+
+    obs = np.stack(obs, axis=0)
     obs = torch.tensor(obs.astype(np.float32)).to(device)
+    masks = np.stack(masks, axis=0)
+    masks = torch.tensor(masks.astype(bool)).to(device)
 
-    mask = np.stack([new_obs[a]['action_mask'] for a in new_obs], axis=0)
-
-    # returns [agents, channels, x_dim, y_dim]
-    return obs, mask
+    return obs, masks
 
 
 def batchify(x, device):
     """Converts PZ style returns to batch of torch arrays."""
-    # convert to list of np arrays
-    x = np.stack([x[a] for a in x], axis=0)
-    # convert to torch
-    x = torch.tensor(x).to(device)
+    out = []
+    for agent in env.possible_agents:
+        if agent in env.agents:
+            out.append(x[agent])
+        else:
+            out.append(np.zeros_like(x[env.agents[0]]))
 
-    return x
+    out = np.stack(out, axis=0)
+    out = torch.tensor(out).to(device)
+
+    return out
 
 
 def unbatchify(x, env):
     """Converts np array to PZ style arguments."""
     x = x.cpu().numpy()
-    x = {a: x[i] for i, a in enumerate(env.possible_agents)}
+    x = {a: x[i] for i, a in enumerate(env.agents)}
 
     return x
 
+
+def obs_to_mask(obs):
+    return torch.where((obs < 1e5), True, False)
 
 if __name__ == "__main__":
 
@@ -97,9 +116,9 @@ if __name__ == "__main__":
 
     """ ENV SETUP """
     env = CustomEnvironment(
-        num_agents=10,
-        map_size=15,
-        num_iters=1_000_000
+        num_agents=3,
+        map_size=3,
+        num_iters=1_000
     )
     num_agents = len(env.possible_agents)
     num_actions = env.num_nodes
@@ -111,7 +130,7 @@ if __name__ == "__main__":
     optimizer = optim.Adam(agent.parameters(), lr=0.001, eps=1e-5)
 
     """ ALGO LOGIC: EPISODE STORAGE"""
-    end_step = 0
+    end_step = -1
     total_episodic_return = 0
     rb_obs = torch.zeros((max_cycles, num_agents, observation_size)).to(device)
     rb_actions = torch.zeros((max_cycles, num_agents)).to(device)
@@ -136,7 +155,7 @@ if __name__ == "__main__":
             for step in range(0, max_cycles):
 
                 # rollover the observation
-                obs, action_mask = batchify_obs(next_obs, device)
+                obs, action_mask = batchify_obs(env, next_obs, device)
 
                 # get action from the agent
                 actions, logprobs, _, values = agent.get_action_and_value(obs, action_mask)
@@ -145,14 +164,15 @@ if __name__ == "__main__":
                 next_obs, rewards, terms, truncs, infos = env.step(
                     unbatchify(actions, env)
                 )
+                print(obs, actions, logprobs, values, '\n')
 
                 # add to episode storage
-                rb_obs[step] = obs.expand(num_agents, -1)
-                rb_rewards[step] = batchify(rewards, device).expand(num_agents)
-                rb_terms[step] = batchify(terms, device).expand(num_agents)
-                rb_actions[step] = actions.expand(num_agents)
-                rb_logprobs[step] = logprobs.expand(num_agents)
-                rb_values[step] = values.flatten().expand(num_agents)
+                rb_obs[step] = obs
+                rb_rewards[step] = batchify(rewards, device)
+                rb_terms[step] = batchify(terms, device)
+                rb_actions[step] = actions
+                rb_logprobs[step] = logprobs
+                rb_values[step] = values.flatten()
 
                 # compute episodic return
                 total_episodic_return += rb_rewards[step].cpu().numpy()
@@ -162,6 +182,8 @@ if __name__ == "__main__":
                 #     end_step = step
                 #     break
                 if any([truncs[a] for a in truncs]):
+                    print("truncating env...")
+                    print(truncs)
                     end_step = step
                     break
 
@@ -178,13 +200,13 @@ if __name__ == "__main__":
             rb_returns = rb_advantages + rb_values
 
         # convert our episodes to batch of individual transitions
-        print(len(rb_obs), end_step)
-        b_obs = torch.flatten(rb_obs[:end_step], start_dim=0, end_dim=1)
-        b_logprobs = torch.flatten(rb_logprobs[:end_step], start_dim=0, end_dim=1)
-        b_actions = torch.flatten(rb_actions[:end_step], start_dim=0, end_dim=1)
-        b_returns = torch.flatten(rb_returns[:end_step], start_dim=0, end_dim=1)
-        b_values = torch.flatten(rb_values[:end_step], start_dim=0, end_dim=1)
-        b_advantages = torch.flatten(rb_advantages[:end_step], start_dim=0, end_dim=1)
+        # [:end_step]
+        b_obs = torch.flatten(rb_obs, start_dim=0, end_dim=1)
+        b_logprobs = torch.flatten(rb_logprobs, start_dim=0, end_dim=1)
+        b_actions = torch.flatten(rb_actions, start_dim=0, end_dim=1)
+        b_returns = torch.flatten(rb_returns, start_dim=0, end_dim=1)
+        b_values = torch.flatten(rb_values, start_dim=0, end_dim=1)
+        b_advantages = torch.flatten(rb_advantages, start_dim=0, end_dim=1)
 
         # Optimizing the policy and value network
         b_index = np.arange(len(b_obs))
@@ -192,14 +214,14 @@ if __name__ == "__main__":
         for repeat in range(3):
             # shuffle the indices we use to access the data
             np.random.shuffle(b_index)
-            print(len(b_obs), batch_size)
             for start in range(0, len(b_obs), batch_size):
                 # select the indices we want to train on
                 end = start + batch_size
                 batch_index = b_index[start:end]
 
+                mask = obs_to_mask(b_obs[batch_index])
                 _, newlogprob, entropy, value = agent.get_action_and_value(
-                    b_obs[batch_index], b_actions.long()[batch_index]
+                    b_obs[batch_index], mask, b_actions.long()[batch_index]
                 )
                 logratio = newlogprob - b_logprobs[batch_index]
                 ratio = logratio.exp()
@@ -257,5 +279,5 @@ if __name__ == "__main__":
         print(f"Old Approx KL: {old_approx_kl.item()}")
         print(f"Approx KL: {approx_kl.item()}")
         print(f"Clip Fraction: {np.mean(clip_fracs)}")
-        print(f"Explained Variance: {explained_var.item()}")
+        print(f"Explained Variance: {explained_var}")
         print("\n-------------------------------------------\n")
