@@ -15,11 +15,11 @@ from torch.distributions.categorical import Categorical
 from pettingzoo_env import CustomEnvironment
 
 class Agent(nn.Module):
-    def __init__(self, num_actions):
+    def __init__(self, num_actions, kernel_x=1, kernel_y=2):
         super().__init__()
 
-        self.conv1 = nn.Conv2d(1, 1, kernel_size=(2, 2))
-        self.linear = nn.Linear(8, 32)
+        self.conv1 = nn.Conv2d(1, 1, kernel_size=(kernel_x, kernel_y))
+        self.linear = nn.Linear(num_actions-kernel_y+1, 32)
 
         self.actor = self._layer_init(nn.Linear(32, num_actions), std=0.01)
         self.critic = self._layer_init(nn.Linear(32, 1))
@@ -42,13 +42,9 @@ class Agent(nn.Module):
         return self.critic(self.network(x))
 
     def get_action_and_value(self, x, action_mask, action=None):
-        print(x)
         hidden = self.forward(x)
-        print(hidden)
         logits = self.actor(hidden)
-        print(logits)
         logits = torch.where(torch.tensor(action_mask.astype(bool)), logits, -1e8)
-        print(action_mask, logits)
 
         probs = Categorical(logits=logits)
         if action is None:
@@ -95,14 +91,14 @@ if __name__ == "__main__":
     vf_coef = 0.1
     clip_coef = 0.1
     gamma = 0.99
-    batch_size = 32
-    max_cycles = 125
-    total_episodes = 2
+    batch_size = 16 #32
+    max_cycles = 256 #125
+    total_episodes = 64
 
     """ ENV SETUP """
     env = CustomEnvironment(
-        num_agents=2,
-        map_size=3,
+        num_agents=10,
+        map_size=15,
         num_iters=1_000_000
     )
     num_agents = len(env.possible_agents)
@@ -151,18 +147,21 @@ if __name__ == "__main__":
                 )
 
                 # add to episode storage
-                rb_obs[step] = obs
-                rb_rewards[step] = batchify(rewards, device)
-                rb_terms[step] = batchify(terms, device)
-                rb_actions[step] = actions
-                rb_logprobs[step] = logprobs
-                rb_values[step] = values.flatten()
+                rb_obs[step] = obs.expand(num_agents, -1)
+                rb_rewards[step] = batchify(rewards, device).expand(num_agents)
+                rb_terms[step] = batchify(terms, device).expand(num_agents)
+                rb_actions[step] = actions.expand(num_agents)
+                rb_logprobs[step] = logprobs.expand(num_agents)
+                rb_values[step] = values.flatten().expand(num_agents)
 
                 # compute episodic return
                 total_episodic_return += rb_rewards[step].cpu().numpy()
 
-                # if we reach termination or truncation, end
-                if any([terms[a] for a in terms]) or any([truncs[a] for a in truncs]):
+                # # if we reach termination or truncation, end
+                # if any([terms[a] for a in terms]) or any([truncs[a] for a in truncs]):
+                #     end_step = step
+                #     break
+                if any([truncs[a] for a in truncs]):
                     end_step = step
                     break
 
@@ -179,6 +178,7 @@ if __name__ == "__main__":
             rb_returns = rb_advantages + rb_values
 
         # convert our episodes to batch of individual transitions
+        print(len(rb_obs), end_step)
         b_obs = torch.flatten(rb_obs[:end_step], start_dim=0, end_dim=1)
         b_logprobs = torch.flatten(rb_logprobs[:end_step], start_dim=0, end_dim=1)
         b_actions = torch.flatten(rb_actions[:end_step], start_dim=0, end_dim=1)
@@ -192,6 +192,7 @@ if __name__ == "__main__":
         for repeat in range(3):
             # shuffle the indices we use to access the data
             np.random.shuffle(b_index)
+            print(len(b_obs), batch_size)
             for start in range(0, len(b_obs), batch_size):
                 # select the indices we want to train on
                 end = start + batch_size

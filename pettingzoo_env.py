@@ -3,6 +3,7 @@ import random
 
 import numpy as np
 import networkx as nx
+import matplotlib.pyplot as plt
 
 from gymnasium.spaces import Discrete, MultiDiscrete, Box, Tuple, Dict
 from pettingzoo.utils.env import ParallelEnv
@@ -48,18 +49,13 @@ class CustomEnvironment(ParallelEnv):
                                                       kf_mean=3e-5, kf_std=1e-5, c_mean=0.3, c_std=0.05))
         )
         self.render_mode = render_mode
+        if self.render_mode == "human":
+            self.pos = nx.spring_layout(self.G, iterations=250)
 
         print(f"Initialised env with {num_agents} agents on a {map_size}x{map_size} graph.")
 
     @functools.lru_cache(maxsize=None)
     def observation_space(self, agent):
-        # return Tuple(
-        #     [
-        #         # Discrete(self.num_nodes),                       # current node idx
-        #         Box(low=0, high=np.inf, shape=(self.num_nodes,)),   # pollution level at all edges
-        #         Box(low=0, high=1, shape=(self.num_nodes,))     # action mask
-        #     ]
-        # )
         return Dict({
             "pollution": Box(low=0, high=np.inf, shape=(self.num_nodes,)),
             "action_mask": Box(low=0, high=1, shape=(self.num_nodes,), dtype=int)
@@ -73,7 +69,6 @@ class CustomEnvironment(ParallelEnv):
         if seed:
             random.seed(seed)
 
-        # print("started reset")
         self.agents = self.possible_agents[:]
 
         self.timestep = 0
@@ -85,14 +80,13 @@ class CustomEnvironment(ParallelEnv):
         }
         self.observations = {
             agent: {
-                'pollution': np.zeros(shape=(self.num_nodes,)),
+                'pollution': self._get_pollution(agent),
                 'action_mask': self._get_action_mask(self.positions[agent])
             } for agent in self.agents
         }
         self.pollution = {
             agent: 0 for agent in self.agents
         }
-        # print("finished reset")
 
         if not return_info:
             return self.observations
@@ -192,5 +186,19 @@ class CustomEnvironment(ParallelEnv):
         return -0.1*self.timestep + -1*pollution + 100*int(at_goal)
     
     def render(self):
-        if self.render_mode == "human":
-            print("Step ", self.timestep, self.agents, self.positions, self.pollution)
+        if self.render_mode == "ascii":
+            print("Step ", self.timestep, self.positions, self.pollution)
+
+        elif self.render_mode == "human":
+            options = {
+                "font_size": 14,
+                "node_size": 2000,
+                "edgecolors": "black",
+                "linewidths": 5,
+                "width": 5,
+            }
+            plt.figure(figsize=(15,15))
+            nx.draw_networkx(self.G, pos=self.pos, node_color='white', **options)
+            nx.draw_networkx(self.G, nodelist=[self.positions['cyclist_0']], pos=self.pos, node_color='blue', alpha=0.4, label='Start', **options)
+            nx.draw_networkx(self.G, nodelist=self.goals['cyclist_0'], pos=self.pos, node_color='green', alpha=0.4, label='Start & End', **options)
+            plt.savefig(f'figures/img_{self.timestep}')
