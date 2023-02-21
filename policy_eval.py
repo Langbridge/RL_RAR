@@ -7,10 +7,17 @@ import ray.rllib.algorithms.ppo
 import imageio
 
 from pettingzoo_test import env_config
+import argparse
+
 env_config['render_mode'] = 'human'
 env_config['figpath'] = 'figures/img'
 
-chkpt = '/tmp/rllib_checkpoint/checkpoint_000010'
+parser = argparse.ArgumentParser()
+parser.add_argument('checkpoint', type=int)
+parser.add_argument('--o', dest='prefix', default='PPO')
+args = parser.parse_args()
+
+chkpt = f'/tmp/rllib_checkpoint/checkpoint_0000{args.checkpoint}'
 restored_policy = Policy.from_checkpoint(chkpt)
 
 env = ParallelPettingZooEnv(CustomEnvironment(**env_config))
@@ -21,9 +28,9 @@ batch_obs = {
     for agent in env.par_env.agents
     }
 
-fname = f'PPO_{env_config["num_agents"]}agent_{env_config["map_size"]}x{env_config["map_size"]}_{chkpt[-2:]}'
+fname = f'{args.prefix}_{env_config["num_agents"]}agent_{env_config["map_size"]}x{env_config["map_size"]}_{chkpt[-2:]}'
 with imageio.get_writer(f'figures/{fname}.gif', mode='I', duration=0.3) as writer:
-    for x in range(25):
+    for x in range(100):
         action = {
             agent: restored_policy['default_policy'].compute_single_action(batch_obs[agent])[0]
             for agent in env.par_env.agents

@@ -14,6 +14,12 @@ from cyclist import Cyclist, random_cyclists
 class CustomEnvironment(ParallelEnv):
     ambient_pm = 10
     velocity = 20
+    large_const = 1e3
+    params = {
+        'pollution': -50,
+        'neighbourhood': -0.05,
+        'goal': 100,
+    }
 
     def __init__(self, map_size=5, num_agents=2, num_iters=None, render_mode=None, figpath='figures'):
         """
@@ -51,6 +57,7 @@ class CustomEnvironment(ParallelEnv):
         self.render_mode = render_mode
         if self.render_mode == "human":
             self.pos = nx.spring_layout(self.G, iterations=1_500)
+            self.figpath = figpath
 
         print(f"Initialised env with {num_agents} agents on a {map_size}x{map_size} graph.")
 
@@ -72,11 +79,14 @@ class CustomEnvironment(ParallelEnv):
         self.agents = self.possible_agents[:]
 
         self.timestep = 0
-        self.goals = {
+        tasks = {
             agent: random.sample(self.G.nodes(), 2) for agent in self.agents
         }
         self.positions = {
-            agent: self.goals[agent][0] for agent in self.agents
+            agent: tasks[agent][0] for agent in self.agents
+        }
+        self.goals = {
+            agent: tasks[agent][1] for agent in self.agents
         }
         self.observations = {
             agent: {
@@ -87,6 +97,14 @@ class CustomEnvironment(ParallelEnv):
         self.pollution = {
             agent: 0 for agent in self.agents
         }
+        heuristic = {agent: nx.shortest_path_length(self.G, target=self.goals[agent])
+                     for agent in self.agents}
+        node_attrs = {
+            i:
+            {f'heur_{agent}': heuristic[agent][i] for agent in self.agents}
+            for i in range(self.num_nodes)
+        }
+        nx.set_node_attributes(self.G, node_attrs)
 
         if self.render_mode:
             self.render()
@@ -118,23 +136,24 @@ class CustomEnvironment(ParallelEnv):
         terminations = {}
         for agent in self.agents:
             if self._get_action_mask(self.positions[agent])[actions[agent]]:
-                self.positions[agent] = actions[agent]
-                # self.pollution[agent] += self._get_pollution(agent, action=actions[agent])
-                self.pollution[agent] += self.observations[agent]['pollution'][actions[agent]]
-
-                at_goal = (actions[agent] == self.goals[agent][1])
-                rewards[agent] = self._get_reward(self.pollution[agent], at_goal)
+                pollution = self.observations[agent]['pollution'][actions[agent]]
+                at_goal = (actions[agent] == self.goals[agent])
+                heuristic = nx.get_node_attributes(self.G, name=f'heur_{agent}')[actions[agent]]
+                rewards[agent] = self._get_reward(pollution, heuristic, at_goal)
                 terminations[agent] = at_goal
+
+                self.pollution[agent] += pollution
+                self.positions[agent] = actions[agent]
             else:
                 # if invalid move, don't move agent
-                self.pollution[agent] += self.observations[agent]['pollution'][actions[agent]] # large const (1e8)
-                rewards[agent] = self._get_reward(self.pollution[agent], False)
+                pollution = self.large_const
+                rewards[agent] = self._get_reward(pollution, 0, False) # no heurstic as no movement
+                self.pollution[agent] += pollution
 
         self.timestep += 1
         env_truncation = self.timestep >= self.num_iters
         truncations = {agent: env_truncation for agent in self.agents}
 
-        # current observation is just the other player's most recent action
         self.observations = {
             agent: {
                 'pollution': self._get_pollution(agent),
@@ -142,7 +161,6 @@ class CustomEnvironment(ParallelEnv):
             } for agent in self.agents
         }
 
-        # print("ending step")
         # typically there won't be any information in the infos, but there must
         # still be an entry for each agent
         infos = {agent: {} for agent in self.agents}
@@ -181,16 +199,18 @@ class CustomEnvironment(ParallelEnv):
             p_req = self.agent_name_mapping[agent].get_segment_power(dh, dl, self.velocity/3.6)
             rdd = self.agent_name_mapping[agent].eval_segment(self.ambient_pm, p_req, dl*3.6/self.velocity)
             return rdd
+        elif action is not None:
+            return self.large_const
         
         else:
             # return the full array of pollution values for traversal from curr_node
-            observation = np.array([1e8]*self.num_nodes)
+            observation = np.array([self.large_const]*self.num_nodes)
             for (x, y) in self.G.edges(self.positions[agent]):
                 observation[y] = self._get_pollution(agent, action=y)
             return observation
         
-    def _get_reward(self, pollution, at_goal):
-        return -pollution + 100*int(at_goal)
+    def _get_reward(self, pollution, neighbourhood, at_goal):
+        return self.params['pollution']*pollution + self.params['neighbourhood']*neighbourhood + self.params['goal']*int(at_goal)
     
     def render(self, agent_idx=0, reward=None):
         if self.render_mode == "ascii":
@@ -204,10 +224,15 @@ class CustomEnvironment(ParallelEnv):
                 "linewidths": 5,
                 "width": 5,
             }
-            plt.figure(figsize=(15,15))
-            plt.title(f'Step {self.timestep}, {self.possible_agents[agent_idx]} reward {reward[self.possible_agents[agent_idx]]}')
-            nx.draw_networkx(self.G, pos=self.pos, node_color='white', **options)
-            nx.draw_networkx(self.G, nodelist=[self.positions[self.possible_agents[agent_idx]]], pos=self.pos, node_color='blue', alpha=0.4, label='Cyclist', **options)
-            nx.draw_networkx(self.G, nodelist=[self.goals[self.possible_agents[agent_idx]][1]], pos=self.pos, node_color='green', alpha=0.4, label='Goal', **options)
-            plt.savefig(f'{self.figpath}/img_{self.timestep}')
-            plt.close()
+            if reward == None:
+                reward = {agent: 0 for agent in self.possible_agents}
+
+            try:
+                plt.figure(figsize=(15,15))
+                plt.title(f'Step {self.timestep}, {self.possible_agents[agent_idx]} reward {reward[self.possible_agents[agent_idx]]}')
+                nx.draw_networkx(self.G, pos=self.pos, node_color='white', **options)
+                nx.draw_networkx(self.G, nodelist=[self.positions[self.possible_agents[agent_idx]]], pos=self.pos, node_color='blue', alpha=0.4, label='Cyclist', **options)
+                nx.draw_networkx(self.G, nodelist=[self.goals[self.possible_agents[agent_idx]]], pos=self.pos, node_color='green', alpha=0.4, label='Goal', **options)
+                plt.savefig(f'{self.figpath}/img_{self.timestep}')
+            finally:
+                plt.close()
