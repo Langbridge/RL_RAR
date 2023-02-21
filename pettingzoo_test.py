@@ -1,5 +1,5 @@
 from pettingzoo.test import parallel_api_test  # noqa: E402
-from pettingzoo_env import CustomEnvironment
+from pettingzoo_env import CustomEnvironment, CustomEnvironment_NoGoal
 
 import random
 from pprint import pprint
@@ -29,6 +29,7 @@ if __name__ == "__main__":
     algo = ppo.PPOConfig().environment(env='simple', env_config=env_config).framework(framework='torch').build()
     for i in range(500):
         results = algo.train()
+        # print(results.keys())
         print(f"Iter: {i}; avg. reward={results['episode_reward_mean']}")
 
         if (i+1) % 10 == 0:
