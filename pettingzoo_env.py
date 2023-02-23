@@ -385,6 +385,7 @@ class CustomEnvironment_NoGoal(ParallelEnv):
                 pollution = self.large_const
                 rewards[agent] = self._get_reward(pollution, 0, False) # no heurstic as no movement
                 self.pollution[agent] += pollution
+                terminations[agent] = False
 
         self.timestep += 1
         env_truncation = self.timestep >= self.num_iters
@@ -470,6 +471,7 @@ class CustomEnvironment_NoGoal(ParallelEnv):
                 nx.draw_networkx(self.G, nodelist=[self.positions[self.possible_agents[agent_idx]]], pos=self.pos, node_color='blue', alpha=0.4, label='Cyclist', **options)
                 nx.draw_networkx(self.G, nodelist=[self.goals[self.possible_agents[agent_idx]]], pos=self.pos, node_color='green', alpha=0.4, label='Goal', **options)
                 plt.savefig(f'{self.figpath}/img_{self.timestep}')
-                plt.close()
             except KeyError:
                 pass
+            finally:
+                plt.close()
