@@ -23,7 +23,10 @@ class Cyclist():
 
         self.n = n
 
-        self.hr = hr_0
+        self.reset()
+
+    def reset(self):
+        self.hr = self.hr_0
         self.power_history = []
         self.total_rdd = 0
 

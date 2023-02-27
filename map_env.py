@@ -13,7 +13,6 @@ from cyclist import Cyclist, random_cyclists
 
 
 class CustomEnvironment(ParallelEnv):
-    ambient_pm = 10
     velocity = 20
     large_const = 1e3
     params = {
@@ -21,6 +20,7 @@ class CustomEnvironment(ParallelEnv):
         'neighbourhood': -0.05,
         'goal': 100,
     }
+    metadata = {}
 
     def __init__(self, map_size=5, num_agents=2, num_iters=None, const_graph=True, render_mode=None, figpath='figures'):
         """
@@ -37,6 +37,7 @@ class CustomEnvironment(ParallelEnv):
         self.G = nx.DiGraph(self.G)
         self.num_nodes = len(self.G.nodes())
         self.num_edges = len(self.G.edges())
+
         if const_graph:
             node_attrs = {
                 i: {'h': 0} for i in self.G.nodes()
@@ -53,7 +54,6 @@ class CustomEnvironment(ParallelEnv):
                 i: {'pollution': max(0, random.normalvariate(5, 2.5))} for i in self.G.edges()
             }
             random.seed() # reset seed for selecting O-D pairs
-        
         nx.set_node_attributes(self.G, node_attrs)
         nx.set_edge_attributes(self.G, edge_attrs)
 

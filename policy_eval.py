@@ -13,7 +13,7 @@ from collections import defaultdict
 
 env_config = {
     'num_agents': 2,
-    'map_size': 4,
+    'map_size': 2,
     'num_iters': 100,
     # 'render_mode': 'human'
 }
@@ -33,6 +33,7 @@ if args.gif:
     print("creating GIF")
     env_config['render_mode'] = 'human'
     env_config['figpath'] = 'figures/img'
+
     env = ParallelPettingZooEnv(CustomEnvironment(**env_config))
     obs, infos = env.reset()
 
@@ -58,9 +59,8 @@ if args.gif:
                 if any([truncations[a] for a in truncations]):
                     print("Truncating...")
                     break
-                continue
+
     print(f"{env.par_env.pollution}")
-    print(f"{terminations}")
     # tidy up img dir
     files = glob.glob(f'{env_config["figpath"]}/*')
     for f in files:
@@ -100,8 +100,4 @@ if args.eval:
             length[agent].append(episode_lengths[agent])
             tot_reward[agent].append(reward_store[agent])
 
-    # print(length)
-    # print(tot_reward)
     print(f"Checkpoint {args.checkpoint}: \t{np.mean(list(length.values()))}\t{np.mean(list(tot_reward.values()))}")
-
-    pass
