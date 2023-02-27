@@ -55,7 +55,7 @@ class AsyncMapEnv(AECEnv):
             }
             edge_attrs = {
                 i: {
-                    'pollution': max(0, random.normalvariate(5, 2.5)), 'l': max(0, random.normalvariate(200, 50))
+                    'pollution': max(0.1, random.normalvariate(5, 2.5)), 'l': max(0, random.normalvariate(200, 50))
                 } for i in self.G.edges()
             }
             random.seed() # reset seed for selecting O-D pairs
@@ -219,7 +219,6 @@ class AsyncMapEnv(AECEnv):
         self.timestep += 1
         env_truncation = self.timestep >= self.num_iters
         self.truncations = {agent: env_truncation for agent in self.agents}
-
 
         self.observations = {
             agent: {
