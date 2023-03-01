@@ -13,7 +13,7 @@ from pettingzoo.utils.env import ParallelEnv, AECEnv
 from pettingzoo.test import api_test
 from pettingzoo.utils import agent_selector, parallel_to_aec
 
-from cyclist import Cyclist, random_cyclists
+from cyclist import Cyclist, random_cyclists, cyclist_sample
 
 class AsyncMapEnv(AECEnv):
     velocity = 20
@@ -23,9 +23,14 @@ class AsyncMapEnv(AECEnv):
         'neighbourhood': -0.05,
         'goal': 100,
     }
+    vel_reference = { # low and high velocities in kph for three fitness levels
+        0: {0: 10, 1: 20},
+        1: {0: 15, 1: 25},
+        2: {0: 25, 1: 35},
+    }
     metadata = {}
 
-    def __init__(self, map_size=5, num_agents=2, num_iters=None, const_graph=False, render_mode=None, figpath='figures'):
+    def __init__(self, map_size=5, num_agents=2, agent_fitness=None, num_iters=None, const_graph=False, congestion=True, render_mode=None, figpath='figures'):
         """
         The init method takes in environment arguments and should define the following attributes:
         - possible_agents
@@ -45,22 +50,26 @@ class AsyncMapEnv(AECEnv):
             node_attrs = {
                 i: {'h': 0} for i in self.G.nodes()
             }
+            nx.set_node_attributes(self.G, node_attrs)
             edge_attrs = {
                 i: {'pollution': 5} for i in self.G.edges()
             }
+            nx.set_edge_attributes(self.G, edge_attrs)
         else:
             random.seed(0) # ensure graph is same every time
             node_attrs = {
                 i: {'h': random.normalvariate(10, 2)} for i in self.G.nodes()
             }
+            nx.set_node_attributes(self.G, node_attrs)
             edge_attrs = {
                 i: {
-                    'pollution': max(0.1, random.normalvariate(5, 2.5)), 'l': max(0, random.normalvariate(200, 50))
+                    'pollution': max(0.1, random.normalvariate(5, 2.5)),
+                    'l': max(0.1, random.normalvariate(200, 50)),
+                    'dh': self.G.nodes[i[1]]['h'] - self.G.nodes[i[0]]['h'],
                 } for i in self.G.edges()
             }
+            nx.set_edge_attributes(self.G, edge_attrs)
             random.seed() # reset seed for selecting O-D pairs
-        nx.set_node_attributes(self.G, node_attrs)
-        nx.set_edge_attributes(self.G, edge_attrs)
 
         if num_iters:
             self.num_iters = num_iters
@@ -69,25 +78,23 @@ class AsyncMapEnv(AECEnv):
 
         self.timestep = None
         self.possible_agents = ["cyclist_" + str(r) for r in range(num_agents)]
+        if agent_fitness:
+            cyclists = cyclist_sample(1, 0, num_agents-1)
+        else:
+            cyclists = cyclist_sample(num_agents//2, 0, num_agents//2 + num_agents%2)
+        np.random.shuffle(cyclists)
         self.agent_name_mapping = dict(
-            zip(self.possible_agents, random_cyclists(num_agents, mass_mean=85, mass_std=15, hr_0_mean=70, hr_0_std=10,
-                                                      rise_time_mean=30, rise_time_std=5, hr_max_mean=180, hr_max_std=20,
-                                                      kf_mean=3e-5, kf_std=1e-5, c_mean=0.3, c_std=0.05))
+            zip(self.possible_agents, cyclists)
         )
         self.agent_queue = heapdict.heapdict() # agent: length of journey (s) to next node
-
-        # self.action_spaces = {
-        #     agent: self.action_space(agent) for agent in self.possible_agents
-        # }
-        # self.observation_spaces = {
-        #     agent: self.observation_space(agent) for agent in self.possible_agents
-        # }
 
         self.render_mode = render_mode
         if self.render_mode == "human":
             self.pos = nx.spring_layout(self.G, iterations=1_500)
             self.figpath = figpath
             self.colourmap = cm.hsv(np.linspace(0, 1, num_agents+1))
+
+        self.congestion = congestion
         
         print(f"Initialised env with {num_agents} agents on a {map_size}x{map_size} graph.")
 
@@ -97,14 +104,15 @@ class AsyncMapEnv(AECEnv):
             "position": Box(low=0, high=1, shape=(self.num_nodes,), dtype=int),         # one hot position
             "goal": Box(low=0, high=1, shape=(self.num_nodes,), dtype=int),             # one hot goal
             "hr": Box(low=0, high=300, shape=(1,)),                                     # current heart rate
-            "map": Box(low=0, high=300, shape=(self.num_nodes, self.num_nodes)),        # pollution-weighted adjacency matrix
+            "pollution": Box(low=0, high=300, shape=(self.num_nodes, self.num_nodes)),  # pollution-weighted adjacency matrix
+            "steepness": Box(low=-5, high=5, shape=(self.num_nodes, self.num_nodes)),  # gradient-weighted adjacency matrix
         })
 
     @functools.lru_cache(maxsize=None)
     def action_space(self, agent):
         return Dict({
             "destination": Discrete(self.num_nodes),        # destination node
-            "velocity": Discrete(6),                        # movement velocity encoded as 0: 5 through 6: 35
+            "velocity": Discrete(2),                        # movement velocity encoded as 0: low, 1: high
         })
 
     def agent_selector(self):
@@ -137,11 +145,15 @@ class AsyncMapEnv(AECEnv):
                 'position': self._one_hot(tasks[agent][0]),
                 'goal': self._one_hot(tasks[agent][1]),
                 'hr': np.array([self.agent_name_mapping[agent].hr]),
-                'map': self._pollution_map(),
+                'pollution': self._pollution_map(),
+                'steepness': self._power_map(),
             } for agent in self.agents
         }
 
         self.pollution = {
+            agent: 0 for agent in self.agents
+        }
+        self.duration = {
             agent: 0 for agent in self.agents
         }
         self.rewards = {
@@ -159,10 +171,13 @@ class AsyncMapEnv(AECEnv):
 
         heuristic = {agent: nx.shortest_path_length(self.G, target=self.goals[agent])
                      for agent in self.agents}
+
         node_attrs = {
             i:
-            {f'heur_{agent}': heuristic[agent][i] for agent in self.agents}
-            for i in range(self.num_nodes)
+            {
+                f'heur_{agent}': heuristic[agent][i] for agent in self.agents
+            } for i in range(self.num_nodes)
+            
         }
         nx.set_node_attributes(self.G, node_attrs)
 
@@ -187,27 +202,30 @@ class AsyncMapEnv(AECEnv):
         self.rewards = {
             agent: 0 for agent in self.agents
         }
+        action['velocity'] = self._act_to_vel(action['velocity'])
         if self._get_action_mask(self.positions[agent])[action['destination']]: # if valid move
-            self.state[agent] = ((self.positions[agent], action['destination']), action['velocity'])
-            for a, state in self.state.items():
-                if state:
-                    edge, vel = state
-                    if (edge == self.state[agent][0]) and (a != agent):
-                        action['velocity'] = min(action['velocity'], vel)
+            if self.congestion:
+                for a, state in self.state.items():
+                    if state:
+                        edge, vel = state
+                        if (edge == (self.positions[agent], action['destination'])) and (a != agent):
+                            # print(f"Congestion on {edge} between {agent} and {a}: {action['velocity']}, {vel} = {min(action['velocity'], vel)}")
+                            action['velocity'] = min(action['velocity'], vel)
+                self.state[agent] = ((self.positions[agent], action['destination']), action['velocity'])
 
-            pollution, duration = self._get_pollution(agent, action['destination'], (action['velocity']+1)*5)
+            pollution, duration = self._get_pollution(agent, action['destination'], action['velocity'])
             at_goal = (action['destination'] == self.goals[agent])
             heuristic = nx.get_node_attributes(self.G, name=f'heur_{agent}')[action['destination']]
             self.rewards[agent] = self._get_reward(pollution, heuristic, at_goal)
             self.terminations[agent] = at_goal
 
             self.pollution[agent] += pollution
+            self.duration[agent] += duration
             self.positions[agent] = action['destination']
 
         else: # if invalid move, don't move agent
             self.state[agent] = None
-            pollution, duration = self._get_pollution(agent, action['destination'], (action['velocity']+1)*5)
-            heuristic = nx.get_node_attributes(self.G, name=f'heur_{agent}')[self.positions[agent]]
+            pollution, duration = self._get_pollution(agent, action['destination'], action['velocity'])
             self.rewards[agent] = self._get_reward(pollution, 0, False) # no heurstic as no movement
             # self.pollution[agent] += pollution
 
@@ -225,7 +243,8 @@ class AsyncMapEnv(AECEnv):
                 'position': self._one_hot(self.positions[agent]),
                 'goal': self._one_hot(self.goals[agent]),
                 'hr': np.array([self.agent_name_mapping[agent].hr]),
-                'map': self._pollution_map(),
+                'pollution': self._pollution_map(),
+                'steepness': self._power_map(),
             } for agent in self.agents
         }
 
@@ -256,13 +275,14 @@ class AsyncMapEnv(AECEnv):
         return valid_actions
     
     def _get_pollution(self, agent, action, velocity):
-        heights = nx.get_node_attributes(self.G, 'h')
+        heights = nx.get_edge_attributes(self.G, 'dh')
         lens = nx.get_edge_attributes(self.G, 'l')
         polls = nx.get_edge_attributes(self.G, 'pollution')
 
         if (action is not None) and (self._get_action_mask(self.positions[agent])[action]):
             # return a single value for pollution corresponding to an action (ie edge traversal)
-            dh = heights[self.positions[agent]] - heights[action]
+            # dh = heights[self.positions[agent]] - heights[action]
+            dh = heights[(self.positions[agent], action)]
             dl = lens[(self.positions[agent], action)]
             p_req = self.agent_name_mapping[agent].get_segment_power(dh, dl, velocity/3.6)
             rdd = self.agent_name_mapping[agent].eval_segment(polls[(self.positions[agent], action)], p_req, dl*3.6/velocity)
@@ -276,12 +296,26 @@ class AsyncMapEnv(AECEnv):
         #         observation[y] = self._get_pollution(agent, action=y)
         #     return observation
         
+    def _power_map(self):
+        dh = nx.attr_matrix(self.G, edge_attr='dh')[0]
+        l = nx.attr_matrix(self.G, edge_attr='l')[0]
+        res = np.zeros_like(dh)
+        np.divide(dh, l, out=res, where=(l > 0))
+        return np.nan_to_num(res)
+
     def _pollution_map(self):
         return nx.attr_matrix(self.G, edge_attr='pollution')[0]
         
     def _get_reward(self, pollution, neighbourhood, at_goal):
-        return self.params['pollution']*pollution + self.params['neighbourhood']*neighbourhood + self.params['goal']*int(at_goal)
+        # return self.params['pollution']*pollution + self.params['neighbourhood']*neighbourhood + self.params['goal']*int(at_goal)
+        return self.params['pollution']*pollution + self.params['goal']*int(at_goal)
     
+    def _act_to_vel(self, action, fitness=None):
+        if fitness is not None:
+            return self.vel_reference[fitness][action]
+        else:
+            return self.vel_reference[self.agent_name_mapping[self.agent_selection].fitness][action]
+
     def _one_hot(self, idx):
         arr = np.zeros(shape=(self.num_nodes,), dtype=int)
         arr[idx] = 1
@@ -331,13 +365,14 @@ if __name__ == "__main__":
 
     env = AsyncMapEnv(**env_config)
     env.reset()
+    print(env.agent_name_mapping)
     print(env.goals)
 
     ctr = 0
     while len(env.agents) > 0:
         ctr += 1
         destination = random.choice([y for (x, y) in env.G.edges(env.positions[env.agent_selection])])
-        vel = random.randint(0,6)
-        # print(env.agent_selection, destination, (vel+1)*5)
+        vel = random.randint(0,1)
+        print(env.agent_selection, destination, vel)
         env.step({'destination': destination, 'velocity': vel})
     print(f"Took {ctr} iterations")

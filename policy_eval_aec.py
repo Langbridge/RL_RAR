@@ -11,6 +11,8 @@ import glob
 
 from collections import defaultdict
 
+from brute_search import SearchTree
+
 env_config = {
     'num_agents': 10,
     'map_size': 4,
@@ -24,6 +26,7 @@ parser.add_argument('checkpoint', type=int)
 parser.add_argument('-p', '--prefix', dest='prefix', default='PPO')
 parser.add_argument('-g', '--gif', dest='gif', action='store_true')
 parser.add_argument('-e', '--eval', dest='eval', action='store_true')
+parser.add_argument('-s', '--start', dest='start', type=int, default=10)
 args = parser.parse_args()
 
 if args.gif:
@@ -68,6 +71,7 @@ if args.gif:
             writer.append_data(imageio.imread(f'{env_config["figpath"]}/img_{x-1}.png'))
 
     print(f"{env.env.pollution}")
+    print(f"{env.env._cumulative_rewards}")
     # tidy up img dir
     files = glob.glob(f'{env_config["figpath"]}/*')
     for f in files:
@@ -76,19 +80,26 @@ if args.gif:
 if args.eval:
     print("Evaluating performance")
     env_config['render_mode'] = None # remove rendering to accelerate
-    env = PettingZooEnv(AsyncMapEnv(**env_config))
+    raw_env = AsyncMapEnv(**env_config)
+    env = PettingZooEnv(raw_env)
 
-    for c in range(10, args.checkpoint+1, 10):
+    for c in range(args.start, args.checkpoint+1, 10):
         chkpt = f'/tmp/rllib_checkpoint/checkpoint_{str(c).zfill(6)}'
         restored_policy = Policy.from_checkpoint(chkpt)
 
         length = defaultdict(list)
         tot_reward = defaultdict(list)
-        for i in range(500): # 500 runs
+        poll_optimality = defaultdict(list)
+        for i in range(50): # 50 runs
             obs, infos = env.reset()
             truncations = {
                 agent: False for agent in env.env.possible_agents
             }
+
+            # brute force optimal (non-congested) route
+            search = SearchTree(env.env)
+            search.build_tree()
+            optimal_polls = search.pollutions
 
             reward_store = defaultdict(int)
             episode_lengths = defaultdict(int)
@@ -100,10 +111,14 @@ if args.eval:
                 for agent, reward in rewards.items():
                     reward_store[agent] += reward
                     episode_lengths[agent] += 1
+
             for agent in reward_store:
                 length[agent].append(episode_lengths[agent])
                 tot_reward[agent].append(reward_store[agent])
+                poll_optimality[agent].append(search.pollutions[agent] / env.env.pollution[agent])
 
         mean_len = np.mean([np.mean(length[agent]) for agent in length.keys()])
         mean_tot_reward = np.mean([np.mean(tot_reward[agent]) for agent in tot_reward.keys()])
+        mean_optimality = [np.mean(poll_optimality[agent]) for agent in poll_optimality.keys()]
         print(f"Checkpoint {c}: \t{mean_len}\t{mean_tot_reward}")
+        print(f"\t{np.mean(mean_optimality)}")

@@ -12,7 +12,7 @@ class Cyclist():
     mmd = 0.53
     max_his = np.inf # maximum number of historic power exertion to consider
 
-    def __init__(self, sex, mass, hr_0, rise_time, hr_max, kf, c, n=0):
+    def __init__(self, sex, mass, hr_0, rise_time, hr_max, kf, c, fitness=1, n=0):
         self.sex = sex
         self.mass = mass
         self.hr_0 = hr_0
@@ -20,6 +20,7 @@ class Cyclist():
         self.hr_max = hr_max
         self.kf = kf
         self.c = c
+        self.fitness = fitness
 
         self.n = n
 
@@ -76,19 +77,31 @@ class Cyclist():
         return self._inhaled_frac() * (0.0587 + 0.911/(1 + np.exp(4.77 + 1.485 * np.log(self.mmd))) + 0.943/(1 + np.exp(0.508 - 2.58 * np.log(self.mmd))))
 
     def __repr__(self):
-        return f"mass: {self.mass:.2f}\thr_0: {self.hr_0:.2f}\trise_time: {self.rise_time:.2f}\thr_max: {self.hr_max:.2f}\tkf: {self.kf:.2f}\tc: {self.c:.2f}"
+        return f"fitness: {self.fitness}\tmass: {self.mass:.2f}\thr_0: {self.hr_0:.2f}\trise_time: {self.rise_time:.2f}\thr_max: {self.hr_max:.2f}\tkf: {self.kf:.2f}\tc: {self.c:.2f}"
 
 def random_cyclists(n, mass_mean, mass_std, hr_0_mean, hr_0_std, rise_time_mean, rise_time_std,
-                    hr_max_mean, hr_max_std, kf_mean, kf_std, c_mean, c_std):
+                    hr_max_mean, hr_max_std, kf_mean, kf_std, c_mean, c_std, fitness=1, offset=0):
     cyclists = []
     for i in range(n):
         cyclist = Cyclist(sex=random.choice(['M','F']), mass=random.normalvariate(mass_mean, mass_std),
                           hr_0=random.normalvariate(hr_0_mean, hr_0_std), rise_time=random.normalvariate(rise_time_mean, rise_time_std),
                           hr_max=random.normalvariate(hr_max_mean, hr_max_std), kf=random.normalvariate(kf_mean, kf_std),
-                          c=random.normalvariate(c_mean, c_std), n=i)
+                          c=random.normalvariate(c_mean, c_std), fitness=fitness, n=i+offset)
         cyclists.append(cyclist)
 
     return cyclists
+
+def cyclist_sample(n_fit, n_med, n_unfit):
+    fit_cyclists = random_cyclists(n_fit, mass_mean=75, mass_std=5, hr_0_mean=60, hr_0_std=5,
+                                   rise_time_mean=22, rise_time_std=2, hr_max_mean=190, hr_max_std=5,
+                                   kf_mean=1e-5, kf_std=5e-6, c_mean=0.15, c_std=0.02, fitness=2)
+    med_cyclists = random_cyclists(n_med, mass_mean=85, mass_std=10, hr_0_mean=70, hr_0_std=5,
+                                   rise_time_mean=26, rise_time_std=2, hr_max_mean=180, hr_max_std=5,
+                                   kf_mean=3e-5, kf_std=5e-6, c_mean=0.3, c_std=0.05, fitness=1, offset=n_fit)
+    unfit_cyclists = random_cyclists(n_unfit, mass_mean=95, mass_std=10, hr_0_mean=80, hr_0_std=5,
+                                     rise_time_mean=30, rise_time_std=2, hr_max_mean=180, hr_max_std=5,
+                                     kf_mean=6e-5, kf_std=5e-6, c_mean=0.45, c_std=0.02, fitness=0, offset=n_fit+n_med)
+    return fit_cyclists + med_cyclists + unfit_cyclists
 
 config = {
     'sex': 'M',
