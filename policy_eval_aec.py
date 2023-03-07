@@ -5,6 +5,7 @@ from pettingzoo_env import CustomEnvironment
 from aec_env import AsyncMapEnv
 
 from ray.rllib.policy.policy import Policy
+from ray.rllib.algorithms.algorithm import Algorithm
 import imageio.v2 as imageio
 import os
 import glob
@@ -13,13 +14,6 @@ from collections import defaultdict
 
 from brute_search import SearchTree
 
-env_config = {
-    'num_agents': 10,
-    'map_size': 4,
-    'num_iters': 500,
-    # 'render_mode': 'human'
-}
-
 import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument('checkpoint', type=int)
@@ -27,15 +21,26 @@ parser.add_argument('-p', '--prefix', dest='prefix', default='PPO')
 parser.add_argument('-g', '--gif', dest='gif', action='store_true')
 parser.add_argument('-e', '--eval', dest='eval', action='store_true')
 parser.add_argument('-s', '--start', dest='start', type=int, default=10)
+parser.add_argument('--step', dest='step', type=int, default=10)
+parser.add_argument('--path', dest='path', type=str, default='/tmp/rllib_checkpoint/')
+parser.add_argument('-n', '--num_agents', dest='num_agents', type=int, default=1)
 args = parser.parse_args()
+
+env_config = {
+    'num_agents': args.num_agents,
+    'map_size': 4,
+    'num_iters': 500,
+    # 'render_mode': 'human'
+}
 
 if args.gif:
     print("creating GIF")
     env_config['render_mode'] = 'human'
     env_config['figpath'] = 'figures/img'
 
-    chkpt = f'/tmp/rllib_checkpoint/checkpoint_{str(args.checkpoint).zfill(6)}'
+    chkpt = f'{args.path}checkpoint_{str(args.checkpoint).zfill(6)}'
     restored_policy = Policy.from_checkpoint(chkpt)
+    print("policy", restored_policy)
 
     env = PettingZooEnv(AsyncMapEnv(**env_config))
     obs, infos = env.reset()
@@ -83,14 +88,15 @@ if args.eval:
     raw_env = AsyncMapEnv(**env_config)
     env = PettingZooEnv(raw_env)
 
-    for c in range(args.start, args.checkpoint+1, 10):
-        chkpt = f'/tmp/rllib_checkpoint/checkpoint_{str(c).zfill(6)}'
+    for c in range(args.start, args.checkpoint+1, args.step):
+        chkpt = f'{args.path}checkpoint_{str(c).zfill(6)}'
+        print(chkpt)
         restored_policy = Policy.from_checkpoint(chkpt)
 
         length = defaultdict(list)
         tot_reward = defaultdict(list)
         poll_optimality = defaultdict(list)
-        for i in range(50): # 50 runs
+        for i in range(250): # 50 runs
             obs, infos = env.reset()
             truncations = {
                 agent: False for agent in env.env.possible_agents

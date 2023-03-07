@@ -78,11 +78,9 @@ class AsyncMapEnv(AECEnv):
 
         self.timestep = None
         self.possible_agents = ["cyclist_" + str(r) for r in range(num_agents)]
-        if agent_fitness:
-            cyclists = cyclist_sample(1, 0, num_agents-1)
-        else:
-            cyclists = cyclist_sample(num_agents//2, 0, num_agents//2 + num_agents%2)
-        np.random.shuffle(cyclists)
+
+        # implement specification of cyclist fitnesses
+        cyclists = cyclist_sample(num_agents//2, 0, num_agents//2 + num_agents%2)
         self.agent_name_mapping = dict(
             zip(self.possible_agents, cyclists)
         )
@@ -103,9 +101,9 @@ class AsyncMapEnv(AECEnv):
         return Dict({
             "position": Box(low=0, high=1, shape=(self.num_nodes,), dtype=int),         # one hot position
             "goal": Box(low=0, high=1, shape=(self.num_nodes,), dtype=int),             # one hot goal
-            "hr": Box(low=0, high=300, shape=(1,)),                                     # current heart rate
+            "cyclist": Box(low=0, high=300, shape=(8,)),                                # cyclist params
             "pollution": Box(low=0, high=300, shape=(self.num_nodes, self.num_nodes)),  # pollution-weighted adjacency matrix
-            "steepness": Box(low=-5, high=5, shape=(self.num_nodes, self.num_nodes)),  # gradient-weighted adjacency matrix
+            "steepness": Box(low=-5, high=5, shape=(self.num_nodes, self.num_nodes)),   # gradient-weighted adjacency matrix
         })
 
     @functools.lru_cache(maxsize=None)
@@ -124,6 +122,9 @@ class AsyncMapEnv(AECEnv):
             random.seed(seed)
 
         self.agents = self.possible_agents[:]
+        self.agent_name_mapping = dict(
+            zip(self.possible_agents, cyclist_sample(len(self.agents)//2, 0, len(self.agents)//2 + len(self.agents)%2))
+        )
         for agent in self.agents:
             self.agent_queue[agent] = 0
             self.agent_name_mapping[agent].reset()
@@ -144,7 +145,7 @@ class AsyncMapEnv(AECEnv):
             agent: {
                 'position': self._one_hot(tasks[agent][0]),
                 'goal': self._one_hot(tasks[agent][1]),
-                'hr': np.array([self.agent_name_mapping[agent].hr]),
+                'cyclist': self.agent_name_mapping[agent]._param_list(),
                 'pollution': self._pollution_map(),
                 'steepness': self._power_map(),
             } for agent in self.agents
@@ -242,7 +243,7 @@ class AsyncMapEnv(AECEnv):
             agent: {
                 'position': self._one_hot(self.positions[agent]),
                 'goal': self._one_hot(self.goals[agent]),
-                'hr': np.array([self.agent_name_mapping[agent].hr]),
+                'cyclist': self.agent_name_mapping[agent]._param_list(),
                 'pollution': self._pollution_map(),
                 'steepness': self._power_map(),
             } for agent in self.agents
@@ -357,7 +358,7 @@ class AsyncMapEnv(AECEnv):
 if __name__ == "__main__":
     env_config = {
         'num_agents': 2,
-        'map_size': 2,
+        'map_size': 4,
         'num_iters': 1_000,
         # 'render_mode': 'human',
         # 'figpath': None,
@@ -367,6 +368,7 @@ if __name__ == "__main__":
     env.reset()
     print(env.agent_name_mapping)
     print(env.goals)
+    # print(env.observations)
 
     ctr = 0
     while len(env.agents) > 0:

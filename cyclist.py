@@ -18,7 +18,7 @@ class Cyclist():
         self.hr_0 = hr_0
         self.rise_time = rise_time
         self.hr_max = hr_max
-        self.kf = kf
+        self.kf = max(0,kf)
         self.c = c
         self.fitness = fitness
 
@@ -76,6 +76,10 @@ class Cyclist():
     def _deposition_frac(self):
         return self._inhaled_frac() * (0.0587 + 0.911/(1 + np.exp(4.77 + 1.485 * np.log(self.mmd))) + 0.943/(1 + np.exp(0.508 - 2.58 * np.log(self.mmd))))
 
+    def _param_list(self):
+        sex_encoding = self.sex == "M"
+        return np.array([self.fitness, sex_encoding, self.mass, self.hr_0, self.rise_time, self.hr_max, self.kf, self.c])
+
     def __repr__(self):
         return f"fitness: {self.fitness}\tmass: {self.mass:.2f}\thr_0: {self.hr_0:.2f}\trise_time: {self.rise_time:.2f}\thr_max: {self.hr_max:.2f}\tkf: {self.kf:.2f}\tc: {self.c:.2f}"
 
@@ -91,7 +95,7 @@ def random_cyclists(n, mass_mean, mass_std, hr_0_mean, hr_0_std, rise_time_mean,
 
     return cyclists
 
-def cyclist_sample(n_fit, n_med, n_unfit):
+def cyclist_sample(n_fit, n_med, n_unfit, randomise=True):
     fit_cyclists = random_cyclists(n_fit, mass_mean=75, mass_std=5, hr_0_mean=60, hr_0_std=5,
                                    rise_time_mean=22, rise_time_std=2, hr_max_mean=190, hr_max_std=5,
                                    kf_mean=1e-5, kf_std=5e-6, c_mean=0.15, c_std=0.02, fitness=2)
@@ -101,7 +105,10 @@ def cyclist_sample(n_fit, n_med, n_unfit):
     unfit_cyclists = random_cyclists(n_unfit, mass_mean=95, mass_std=10, hr_0_mean=80, hr_0_std=5,
                                      rise_time_mean=30, rise_time_std=2, hr_max_mean=180, hr_max_std=5,
                                      kf_mean=6e-5, kf_std=5e-6, c_mean=0.45, c_std=0.02, fitness=0, offset=n_fit+n_med)
-    return fit_cyclists + med_cyclists + unfit_cyclists
+    cyclists = fit_cyclists + med_cyclists + unfit_cyclists
+    if randomise:
+        np.random.shuffle(cyclists)
+    return cyclists
 
 config = {
     'sex': 'M',
