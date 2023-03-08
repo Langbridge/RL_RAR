@@ -24,12 +24,15 @@ parser.add_argument('-s', '--start', dest='start', type=int, default=10)
 parser.add_argument('--step', dest='step', type=int, default=10)
 parser.add_argument('--path', dest='path', type=str, default='/tmp/rllib_checkpoint/')
 parser.add_argument('-n', '--num_agents', dest='num_agents', type=int, default=1)
+parser.add_argument('-r', '--reinit_agents', action='store_true')
+parser.add_argument('--small_obs', action='store_true')
 args = parser.parse_args()
 
 env_config = {
     'num_agents': args.num_agents,
     'map_size': 4,
     'num_iters': 500,
+    'reinit_agents': args.reinit_agents,
     # 'render_mode': 'human'
 }
 
@@ -96,7 +99,7 @@ if args.eval:
         length = defaultdict(list)
         tot_reward = defaultdict(list)
         poll_optimality = defaultdict(list)
-        for i in range(250): # 50 runs
+        for i in range(100): # 100 runs
             obs, infos = env.reset()
             truncations = {
                 agent: False for agent in env.env.possible_agents
@@ -110,7 +113,13 @@ if args.eval:
             reward_store = defaultdict(int)
             episode_lengths = defaultdict(int)
             while not any(truncations.values()): # until truncation
-                batch_obs = space_utils.flatten_to_single_ndarray(obs[env.env.agent_selection])
+                if args.small_obs:
+                    raw_obs = obs[env.env.agent_selection]
+                    raw_obs['cyclist'] = raw_obs['cyclist'][0]
+                    batch_obs = space_utils.flatten_to_single_ndarray(raw_obs)
+                else:
+                    batch_obs = space_utils.flatten_to_single_ndarray(obs[env.env.agent_selection])
+
                 action = [restored_policy['default_policy'].compute_single_action(batch_obs)][0][0]
                 obs, rewards, terminations, truncations, infos = env.step({env.env.agent_selection: action})
 

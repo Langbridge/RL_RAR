@@ -30,7 +30,7 @@ class AsyncMapEnv(AECEnv):
     }
     metadata = {}
 
-    def __init__(self, map_size=5, num_agents=2, agent_fitness=None, num_iters=None, const_graph=False, congestion=True, render_mode=None, figpath='figures'):
+    def __init__(self, map_size=5, num_agents=2, reinit_agents=False, num_iters=None, const_graph=False, congestion=True, render_mode=None, figpath='figures'):
         """
         The init method takes in environment arguments and should define the following attributes:
         - possible_agents
@@ -84,6 +84,7 @@ class AsyncMapEnv(AECEnv):
         self.agent_name_mapping = dict(
             zip(self.possible_agents, cyclists)
         )
+        self.reinit_agents = reinit_agents
         self.agent_queue = heapdict.heapdict() # agent: length of journey (s) to next node
 
         self.render_mode = render_mode
@@ -122,9 +123,10 @@ class AsyncMapEnv(AECEnv):
             random.seed(seed)
 
         self.agents = self.possible_agents[:]
-        self.agent_name_mapping = dict(
-            zip(self.possible_agents, cyclist_sample(len(self.agents)//2, 0, len(self.agents)//2 + len(self.agents)%2))
-        )
+        if self.reinit_agents:
+            self.agent_name_mapping = dict(
+                zip(self.possible_agents, cyclist_sample(len(self.agents)//2, 0, len(self.agents)//2 + len(self.agents)%2))
+            )
         for agent in self.agents:
             self.agent_queue[agent] = 0
             self.agent_name_mapping[agent].reset()

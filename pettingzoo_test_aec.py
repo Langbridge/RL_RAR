@@ -17,12 +17,14 @@ import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument('-c', '--constant', dest='constant', action='store_true', help='If true, set pollution level and height of all edges to the same value for deterministic routing.')
 parser.add_argument('-n', '--num_agents', dest='num_agents', type=int, default=10, help='Number of agents to initialise the environment with.')
+parser.add_argument('-r', '--reinit_agents', action='store_true')
 args = parser.parse_args()
 
 env_config = {
     'num_agents': args.num_agents,
     'map_size': 4,
     'num_iters': 500,
+    'reinit_agents': args.reinit_agents,
     # 'render_mode': 'human'
 }
 
