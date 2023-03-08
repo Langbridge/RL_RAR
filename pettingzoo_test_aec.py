@@ -15,6 +15,7 @@ from ray import tune, air
 
 import argparse
 parser = argparse.ArgumentParser()
+parser.add_argument('num_iters', type=int, help='Number of iterations to train for.')
 parser.add_argument('-c', '--constant', dest='constant', action='store_true', help='If true, set pollution level and height of all edges to the same value for deterministic routing.')
 parser.add_argument('-n', '--num_agents', dest='num_agents', type=int, default=10, help='Number of agents to initialise the environment with.')
 parser.add_argument('-r', '--reinit_agents', action='store_true')
@@ -37,7 +38,7 @@ if __name__ == "__main__":
     env_creator = lambda config: AsyncMapEnv(**config)
     register_env('simple', lambda config: PettingZooEnv(env_creator(config)))
 
-    stop = {'training_iteration': 1000}
+    stop = {'training_iteration': args.num_iters}
     results = tune.Tuner(
             "PPO",
             run_config=air.RunConfig(
