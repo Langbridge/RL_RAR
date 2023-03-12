@@ -1,15 +1,11 @@
-from pettingzoo.test import parallel_api_test  # noqa: E402
 from aec_env import AsyncMapEnv
 
-import random
 from pprint import pprint
 
-import gym, ray
+import ray
 from ray.rllib.algorithms import ppo
 from ray.rllib.env import PettingZooEnv, ParallelPettingZooEnv
 from ray.tune.registry import register_env
-
-from pettingzoo.classic import rps_v2
 
 from ray import tune, air
 

@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 from matplotlib.pyplot import cm
 
 import heapdict
+from pprint import pprint
 
 from gymnasium.spaces import Discrete, MultiDiscrete, Box, Tuple, Dict
 from pettingzoo.utils.env import ParallelEnv, AECEnv
@@ -14,6 +15,36 @@ from pettingzoo.test import api_test
 from pettingzoo.utils import agent_selector, parallel_to_aec
 
 from cyclist import Cyclist, random_cyclists, cyclist_sample
+
+def multivariate_gaussian(pos, mu, Sigma):
+    """Return the multivariate Gaussian distribution on array pos."""
+    n = mu.shape[0]
+    Sigma_det = np.linalg.det(Sigma)
+    Sigma_inv = np.linalg.inv(Sigma)
+    N = np.sqrt((2*np.pi)**n * Sigma_det)
+    # This einsum call calculates (x-mu)T.Sigma-1.(x-mu) in a vectorized
+    # way across all the input variables.
+    fac = np.einsum('...k,kl,...l->...', pos-mu, Sigma_inv, pos-mu)
+    return np.exp(-fac / 2) / N
+
+def hill_create(map_size, height=1, width=1, centre=np.array([0., 0.]), skewness=np.array([[ 1., 0], [0,  1.]])):
+    X = np.array([i for i in range(map_size)])
+    Y = np.array([i for i in range(map_size)])
+    X, Y = np.meshgrid(X, Y)
+
+    pos = np.empty(X.shape + (2,))
+    pos[:, :, 0] = X
+    pos[:, :, 1] = Y
+    
+    hill = multivariate_gaussian(pos, centre, width*skewness)
+    return height*hill
+
+def make_landscape(map_size, hill_params):
+    Z = np.zeros((map_size, map_size))
+    for centre, height, width in hill_params:
+        Z += hill_create(map_size, height, width, np.array(centre))
+    return Z
+
 
 class AsyncMapEnv(AECEnv):
     velocity = 20
@@ -30,7 +61,7 @@ class AsyncMapEnv(AECEnv):
     }
     metadata = {}
 
-    def __init__(self, map_size=5, num_agents=2, reinit_agents=False, num_iters=None, const_graph=False, congestion=True, render_mode=None, figpath='figures'):
+    def __init__(self, map_size=5, num_agents=2, reinit_agents=False, num_iters=None, const_graph=False, congestion=True, hill_attrs=[], corners=False, render_mode=None, figpath='figures'):
         """
         The init method takes in environment arguments and should define the following attributes:
         - possible_agents
@@ -51,36 +82,46 @@ class AsyncMapEnv(AECEnv):
                 i: {'h': 0} for i in self.G.nodes()
             }
             nx.set_node_attributes(self.G, node_attrs)
-            edge_attrs = {
-                i: {'pollution': 5} for i in self.G.edges()
+
+        elif len(hill_attrs) > 0:
+            random.seed(0)
+            map_ax = [i for i in range(map_size)]
+            X, Y = np.meshgrid(map_ax, map_ax)
+            heightmap = np.random.random_sample(size=(map_size, map_size))
+            heightmap += make_landscape(map_size, hill_attrs)*10
+            heightmap = heightmap.reshape(map_size**2,)
+            node_attrs = {
+                i: {'h': heightmap[i]} for i in self.G.nodes()
             }
-            nx.set_edge_attributes(self.G, edge_attrs)
+            nx.set_node_attributes(self.G, node_attrs)
+
         else:
             random.seed(0) # ensure graph is same every time
             node_attrs = {
                 i: {'h': random.normalvariate(10, 2)} for i in self.G.nodes()
             }
             nx.set_node_attributes(self.G, node_attrs)
-            edge_attrs = {
-                i: {
-                    'pollution': max(0.1, random.normalvariate(5, 2.5)),
-                    'l': max(0.1, random.normalvariate(200, 50)),
-                    'dh': self.G.nodes[i[1]]['h'] - self.G.nodes[i[0]]['h'],
-                } for i in self.G.edges()
-            }
-            nx.set_edge_attributes(self.G, edge_attrs)
-            random.seed() # reset seed for selecting O-D pairs
+
+        edge_attrs = {
+            i: {
+                'pollution': max(0.1, random.normalvariate(5, 2.5)),
+                'l': max(0.1, random.normalvariate(500, 20)),
+                'dh': self.G.nodes[i[1]]['h'] - self.G.nodes[i[0]]['h'],
+            } for i in self.G.edges()
+        }
+        nx.set_edge_attributes(self.G, edge_attrs)
+        random.seed() # reset seed for selecting O-D pairs
 
         if num_iters:
             self.num_iters = num_iters
         else:
-            self.num_iters = 100
+            self.num_iters = 1_000
 
         self.timestep = None
         self.possible_agents = ["cyclist_" + str(r) for r in range(num_agents)]
 
         # implement specification of cyclist fitnesses
-        cyclists = cyclist_sample(num_agents//2, 0, num_agents//2 + num_agents%2)
+        cyclists = cyclist_sample(num_agents//3, num_agents//3, num_agents//3 + num_agents%3)
         self.agent_name_mapping = dict(
             zip(self.possible_agents, cyclists)
         )
@@ -94,6 +135,9 @@ class AsyncMapEnv(AECEnv):
             self.colourmap = cm.hsv(np.linspace(0, 1, num_agents+1))
 
         self.congestion = congestion
+        self.corners = corners
+        if self.corners:
+            self.corner_list = [0, map_size-1, map_size**2-map_size, map_size**2-1]
         
         print(f"Initialised env with {num_agents} agents on a {map_size}x{map_size} graph.")
 
@@ -125,7 +169,7 @@ class AsyncMapEnv(AECEnv):
         self.agents = self.possible_agents[:]
         if self.reinit_agents:
             self.agent_name_mapping = dict(
-                zip(self.possible_agents, cyclist_sample(len(self.agents)//2, 0, len(self.agents)//2 + len(self.agents)%2))
+                zip(self.possible_agents, cyclist_sample(len(self.agents)//3, len(self.agents)//3, len(self.agents)//3 + len(self.agents)%3))
             )
         for agent in self.agents:
             self.agent_queue[agent] = 0
@@ -133,9 +177,14 @@ class AsyncMapEnv(AECEnv):
         self.agent_selection = self.agent_selector()
 
         self.timestep = 0
-        tasks = {
-            agent: random.sample(self.G.nodes(), 2) for agent in self.agents
-        }
+        if self.corners:
+            tasks = {
+                agent: random.sample(self.corner_list, 2) for agent in self.agents
+            }
+        else:
+            tasks = {
+                agent: random.sample(self.G.nodes(), 2) for agent in self.agents
+            }
         self.positions = {
             agent: tasks[agent][0] for agent in self.agents
         }
@@ -359,16 +408,24 @@ class AsyncMapEnv(AECEnv):
 
 if __name__ == "__main__":
     env_config = {
-        'num_agents': 2,
-        'map_size': 4,
+        'num_agents': 4,
+        'map_size': 20,
         'num_iters': 1_000,
+        'corners': True,
+        'hill_attrs': [
+                        [[10,5], 10, 4],
+                        [[7,12], 20, 10],
+                        [[15,13], 15, 6],
+                      ]
         # 'render_mode': 'human',
         # 'figpath': None,
     }
 
+    # --- ENV TESTING
     env = AsyncMapEnv(**env_config)
     env.reset()
-    print(env.agent_name_mapping)
+    pprint(env.agent_name_mapping)
+    print(env.positions)
     print(env.goals)
     # print(env.observations)
 
@@ -380,3 +437,23 @@ if __name__ == "__main__":
         print(env.agent_selection, destination, vel)
         env.step({'destination': destination, 'velocity': vel})
     print(f"Took {ctr} iterations")
+
+    # ---- HILL TESTING
+    # map_size = 20
+    # map_ax = [i for i in range(map_size)]
+    # X, Y = np.meshgrid(map_ax, map_ax)
+
+    # base_map = np.random.random_sample(size=(map_size, map_size))*0.1
+    # # hills = [x, y], height, width
+    # hill_attrs =  [
+    #                [[10,5], 10, 4],
+    #                [[7,12], 20, 10],
+    #                [[15,13], 15, 6],
+    #                ]
+    # heightmap = base_map + make_landscape(map_size, hill_attrs)
+    # heightmap *= 10
+
+    # fig = plt.figure()
+    # ax = fig.add_subplot(111, projection='3d')
+    # ax.plot_surface(X, Y, heightmap)
+    # plt.show()

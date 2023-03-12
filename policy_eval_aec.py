@@ -11,6 +11,8 @@ import os
 import glob
 
 from collections import defaultdict
+from pprint import pprint
+import csv
 
 from brute_search import SearchTree
 
@@ -99,7 +101,7 @@ if args.eval:
         length = defaultdict(list)
         tot_reward = defaultdict(list)
         poll_optimality = defaultdict(list)
-        for i in range(100): # 100 runs
+        for i in range(int(800/args.num_agents)): # 80 runs for 10 agent, 800 for 1 agent
             obs, infos = env.reset()
             truncations = {
                 agent: False for agent in env.env.possible_agents
@@ -135,5 +137,21 @@ if args.eval:
         mean_len = np.mean([np.mean(length[agent]) for agent in length.keys()])
         mean_tot_reward = np.mean([np.mean(tot_reward[agent]) for agent in tot_reward.keys()])
         mean_optimality = [np.mean(poll_optimality[agent]) for agent in poll_optimality.keys()]
-        print(f"Checkpoint {c}: \t{mean_len}\t{mean_tot_reward}")
-        print(f"\t{np.mean(mean_optimality)}")
+
+        print(f"Checkpoint {c}: \t{mean_len}\t{mean_tot_reward}\t{np.mean(mean_optimality)}")
+
+        fitness_optimality = defaultdict(list)
+
+        for agent in poll_optimality.keys():
+            fitness_optimality[env.env.agent_name_mapping[agent].fitness] += poll_optimality[agent]
+        fitness_optimality = {fit: np.mean(fitness_optimality[fit]) for fit in fitness_optimality.keys()}
+        for x in range(3):
+            try:
+                fitness_optimality[x]
+            except KeyError:
+                fitness_optimality[x] = np.nan
+        pprint(fitness_optimality)
+
+        with open('optimality_eval.csv', 'a', newline='') as csv_file:
+            writer = csv.writer(csv_file)
+            writer.writerow([args.path, c, args.num_agents, mean_len, mean_tot_reward, np.mean(mean_optimality), fitness_optimality[0], fitness_optimality[1], fitness_optimality[2]])
