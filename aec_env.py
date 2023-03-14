@@ -61,7 +61,7 @@ class AsyncMapEnv(AECEnv):
     }
     metadata = {}
 
-    def __init__(self, map_size=5, num_agents=2, reinit_agents=False, num_iters=None, const_graph=False, congestion=True, hill_attrs=[], corners=False, render_mode=None, figpath='figures'):
+    def __init__(self, map_size=5, num_agents=2, reinit_agents=False, num_iters=None, const_graph=False, congestion=True, hill_attrs=[], corners=False, fit_split=3, render_mode=None, figpath='figures'):
         """
         The init method takes in environment arguments and should define the following attributes:
         - possible_agents
@@ -121,7 +121,10 @@ class AsyncMapEnv(AECEnv):
         self.possible_agents = ["cyclist_" + str(r) for r in range(num_agents)]
 
         # implement specification of cyclist fitnesses
-        cyclists = cyclist_sample(num_agents//3, num_agents//3, num_agents//3 + num_agents%3)
+        if fit_split == 2:
+            cyclists = cyclist_sample(num_agents//2, 0, num_agents//2 + num_agents%2)
+        else:
+            cyclists = cyclist_sample(num_agents//3, num_agents//3, num_agents//3 + num_agents%3)
         self.agent_name_mapping = dict(
             zip(self.possible_agents, cyclists)
         )
@@ -135,6 +138,7 @@ class AsyncMapEnv(AECEnv):
             self.colourmap = cm.hsv(np.linspace(0, 1, num_agents+1))
 
         self.congestion = congestion
+        self.fit_split = fit_split
         self.corners = corners
         if self.corners:
             self.corner_list = [0, map_size-1, map_size**2-map_size, map_size**2-1]
@@ -168,9 +172,14 @@ class AsyncMapEnv(AECEnv):
 
         self.agents = self.possible_agents[:]
         if self.reinit_agents:
-            self.agent_name_mapping = dict(
-                zip(self.possible_agents, cyclist_sample(len(self.agents)//3, len(self.agents)//3, len(self.agents)//3 + len(self.agents)%3))
-            )
+            if self.fit_split == 2:
+                self.agent_name_mapping = dict(
+                    zip(self.possible_agents, cyclist_sample(len(self.agents)//2, 0, len(self.agents)//2 + len(self.agents)%2))
+                )
+            else:
+                self.agent_name_mapping = dict(
+                    zip(self.possible_agents, cyclist_sample(len(self.agents)//3, len(self.agents)//3, len(self.agents)//3 + len(self.agents)%3))
+                )
         for agent in self.agents:
             self.agent_queue[agent] = 0
             self.agent_name_mapping[agent].reset()
@@ -411,6 +420,7 @@ if __name__ == "__main__":
         'num_agents': 4,
         'map_size': 20,
         'num_iters': 1_000,
+        'fit_split': 3,
         'corners': True,
         'hill_attrs': [
                         [[10,5], 10, 4],

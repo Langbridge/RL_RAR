@@ -26,17 +26,27 @@ parser.add_argument('-s', '--start', dest='start', type=int, default=10)
 parser.add_argument('--step', dest='step', type=int, default=10)
 parser.add_argument('--path', dest='path', type=str, default='/tmp/rllib_checkpoint/')
 parser.add_argument('-n', '--num_agents', dest='num_agents', type=int, default=1)
+parser.add_argument('-m', '--map_size', dest='map_size', type=int, default=4)
 parser.add_argument('-r', '--reinit_agents', action='store_true')
 parser.add_argument('--small_obs', action='store_true')
 args = parser.parse_args()
 
 env_config = {
     'num_agents': args.num_agents,
-    'map_size': 4,
-    'num_iters': 500,
+    'map_size': args.map_size,
+    'num_iters': args.num_agents * np.hypot(args.map_size, args.map_size),
     'reinit_agents': args.reinit_agents,
+    'fit_split': 2,
     # 'render_mode': 'human'
 }
+if args.map_size > 10:
+    env_config['fit_split'] = 3
+    env_config['corners'] = True
+    env_config['hill_attrs'] = [
+                                [[10,5], 10, 4],
+                                [[7,12], 20, 10],
+                                [[15,13], 15, 6],
+                               ]
 
 if args.gif:
     print("creating GIF")
@@ -101,16 +111,18 @@ if args.eval:
         length = defaultdict(list)
         tot_reward = defaultdict(list)
         poll_optimality = defaultdict(list)
-        for i in range(int(800/args.num_agents)): # 80 runs for 10 agent, 800 for 1 agent
+        for i in range(int(np.ceil(800/args.num_agents))): # 80 runs for 10 agent, 800 for 1 agent
             obs, infos = env.reset()
             truncations = {
                 agent: False for agent in env.env.possible_agents
             }
 
+            print("Starting brute search")
             # brute force optimal (non-congested) route
             search = SearchTree(env.env)
             search.build_tree()
             optimal_polls = search.pollutions
+            print("Finished brute search")
 
             reward_store = defaultdict(int)
             episode_lengths = defaultdict(int)

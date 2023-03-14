@@ -36,4 +36,4 @@ if __name__ == "__main__":
         results = algo.train()
         if (x+1) % 50 == 0:
             print(f"Iter: {x+args.checkpoint}; avg. reward {results['episode_reward_mean']}; avg. len {results['episode_len_mean']}")
-            print(algo.save(f'{args.path}checkpoint_{str(x+args.checkpoint).zfill(6)}'))
+            print(algo.save(f'{args.path}checkpoint_{str(x).zfill(6)}'))
