@@ -34,10 +34,11 @@ class SearchTree:
 
         self.pollutions = {agent: 0 for agent in self.env.possible_agents}
 
-    def build_tree(self, velocities=[0,1]):
+    def build_tree(self, velocities=[0,1], verbose=0):
         for agent in self.env.possible_agents:
             start = self.env.positions[agent]
             goal = self.env.goals[agent]
+            if verbose: print(f"Building tree for agent {agent} from {start} to {goal}")
             cyclist = self.env.agent_name_mapping[agent]
 
             # add initial node

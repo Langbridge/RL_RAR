@@ -52,7 +52,7 @@ class AsyncMapEnv(AECEnv):
     params = {
         'pollution': -50,
         'neighbourhood': -0.05,
-        'goal': 100,
+        'goal': 0,
     }
     vel_reference = { # low and high velocities in kph for three fitness levels
         0: {0: 10, 1: 20},
@@ -61,7 +61,7 @@ class AsyncMapEnv(AECEnv):
     }
     metadata = {}
 
-    def __init__(self, map_size=5, num_agents=2, reinit_agents=False, num_iters=None, const_graph=False, congestion=True, hill_attrs=[], corners=False, fit_split=3, render_mode=None, figpath='figures'):
+    def __init__(self, map_size=5, num_agents=2, reinit_agents=False, num_iters=None, const_graph=False, congestion=True, hill_attrs=[], poll_attrs=[], corners=False, fit_split=3, render_mode=None, figpath='figures'):
         """
         The init method takes in environment arguments and should define the following attributes:
         - possible_agents
@@ -79,38 +79,40 @@ class AsyncMapEnv(AECEnv):
 
         if const_graph:
             node_attrs = {
-                i: {'h': 0} for i in self.G.nodes()
+                i: {'h': 0, 'pollution': 5} for i in self.G.nodes()
             }
             nx.set_node_attributes(self.G, node_attrs)
 
         elif len(hill_attrs) > 0:
-            random.seed(0)
+            np.random.seed(0)
             map_ax = [i for i in range(map_size)]
             X, Y = np.meshgrid(map_ax, map_ax)
-            heightmap = np.random.random_sample(size=(map_size, map_size))
-            heightmap += make_landscape(map_size, hill_attrs)*10
+            heightmap = np.random.random_sample(size=(map_size, map_size)) + make_landscape(map_size, hill_attrs)*10
+            pollmap = (np.random.random_sample(size=(map_size, map_size))*0.1 + make_landscape(map_size, poll_attrs))*25
             heightmap = heightmap.reshape(map_size**2,)
+            pollmap = pollmap.reshape(map_size**2,)
             node_attrs = {
-                i: {'h': heightmap[i]} for i in self.G.nodes()
+                i: {'h': heightmap[i], 'pollution': pollmap[i]} for i in self.G.nodes()
             }
             nx.set_node_attributes(self.G, node_attrs)
 
         else:
             random.seed(0) # ensure graph is same every time
             node_attrs = {
-                i: {'h': random.normalvariate(10, 2)} for i in self.G.nodes()
+                i: {'h': random.normalvariate(10, 2), 'pollution': random.normalvariate(5, 2.5)} for i in self.G.nodes()
             }
             nx.set_node_attributes(self.G, node_attrs)
 
         edge_attrs = {
             i: {
-                'pollution': max(0.1, random.normalvariate(5, 2.5)),
+                'pollution': max(0.1, np.mean([self.G.nodes[i[1]]['pollution'], self.G.nodes[i[0]]['pollution']])),
                 'l': max(0.1, random.normalvariate(500, 20)),
                 'dh': self.G.nodes[i[1]]['h'] - self.G.nodes[i[0]]['h'],
             } for i in self.G.edges()
         }
         nx.set_edge_attributes(self.G, edge_attrs)
         random.seed() # reset seed for selecting O-D pairs
+        np.random.seed()
 
         if num_iters:
             self.num_iters = num_iters
@@ -287,7 +289,7 @@ class AsyncMapEnv(AECEnv):
         else: # if invalid move, don't move agent
             self.state[agent] = None
             pollution, duration = self._get_pollution(agent, action['destination'], action['velocity'])
-            self.rewards[agent] = self._get_reward(pollution, 0, False) # no heurstic as no movement
+            self.rewards[agent] = self._get_reward(pollution, 0, False)
             # self.pollution[agent] += pollution
 
         if self.render_mode:
@@ -388,9 +390,12 @@ class AsyncMapEnv(AECEnv):
 
         elif self.render_mode == "human":
             options = {
-                "node_size": 2000,
                 "linewidths": 5,
             }
+            if self.num_nodes <= 25:
+                options["node_size"] = 2000
+            else:
+                options["node_size"] = 500
 
             try:
                 plt.figure(figsize=(15,15))
@@ -418,7 +423,7 @@ class AsyncMapEnv(AECEnv):
 if __name__ == "__main__":
     env_config = {
         'num_agents': 4,
-        'map_size': 20,
+        'map_size': 10,
         'num_iters': 1_000,
         'fit_split': 3,
         'corners': True,
@@ -434,36 +439,37 @@ if __name__ == "__main__":
     # --- ENV TESTING
     env = AsyncMapEnv(**env_config)
     env.reset()
-    pprint(env.agent_name_mapping)
-    print(env.positions)
-    print(env.goals)
-    # print(env.observations)
+    # pprint(env.agent_name_mapping)
+    # print(env.positions)
+    # print(env.goals)
+    # print(env.observations[env.agent_selection])
 
-    ctr = 0
-    while len(env.agents) > 0:
-        ctr += 1
-        destination = random.choice([y for (x, y) in env.G.edges(env.positions[env.agent_selection])])
-        vel = random.randint(0,1)
-        print(env.agent_selection, destination, vel)
-        env.step({'destination': destination, 'velocity': vel})
-    print(f"Took {ctr} iterations")
+    # ctr = 0
+    # while len(env.agents) > 0:
+    #     ctr += 1
+    #     destination = random.choice([y for (x, y) in env.G.edges(env.positions[env.agent_selection])])
+    #     vel = random.randint(0,1)
+    #     print(env.agent_selection, destination, vel)
+    #     env.step({'destination': destination, 'velocity': vel})
+    # print(f"Took {ctr} iterations")
 
     # ---- HILL TESTING
-    # map_size = 20
+    # map_size = 8
     # map_ax = [i for i in range(map_size)]
     # X, Y = np.meshgrid(map_ax, map_ax)
+    # np.random.seed(0)
 
     # base_map = np.random.random_sample(size=(map_size, map_size))*0.1
     # # hills = [x, y], height, width
     # hill_attrs =  [
-    #                [[10,5], 10, 4],
-    #                [[7,12], 20, 10],
-    #                [[15,13], 15, 6],
-    #                ]
+    #                 [[5,2], 4, 2],
+    #                 [[3,6], 7, 3],
+    #                 # [[8,7], 7.5, 3],
+    #               ]
     # heightmap = base_map + make_landscape(map_size, hill_attrs)
     # heightmap *= 10
 
     # fig = plt.figure()
     # ax = fig.add_subplot(111, projection='3d')
-    # ax.plot_surface(X, Y, heightmap)
+    # ax.plot_surface(X, Y, heightmap, cmap='viridis', edgecolor='none')
     # plt.show()
