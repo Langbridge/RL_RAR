@@ -39,14 +39,6 @@ env_config = {
     'fit_split': 2,
     # 'render_mode': 'human'
 }
-if args.map_size > 10:
-    env_config['fit_split'] = 3
-    env_config['corners'] = True
-    env_config['hill_attrs'] = [
-                                [[10,5], 10, 4],
-                                [[7,12], 20, 10],
-                                [[15,13], 15, 6],
-                               ]
 
 if args.gif:
     print("creating GIF")
@@ -117,12 +109,10 @@ if args.eval:
                 agent: False for agent in env.env.possible_agents
             }
 
-            print("Starting brute search")
             # brute force optimal (non-congested) route
             search = SearchTree(env.env)
             search.build_tree()
             optimal_polls = search.pollutions
-            print("Finished brute search")
 
             reward_store = defaultdict(int)
             episode_lengths = defaultdict(int)
