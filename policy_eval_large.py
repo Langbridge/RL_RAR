@@ -1,7 +1,6 @@
 import numpy as np
 from ray.rllib.env import PettingZooEnv, ParallelPettingZooEnv
 from ray.rllib.utils.spaces import space_utils
-from pettingzoo_env import CustomEnvironment
 from aec_env import AsyncMapEnv
 
 from ray.rllib.policy.policy import Policy
@@ -22,6 +21,7 @@ parser.add_argument('checkpoint', type=int)
 parser.add_argument('-s', '--start', dest='start', type=int, default=10)
 parser.add_argument('--step', dest='step', type=int, default=10)
 parser.add_argument('--path', dest='path', type=str, default='/tmp/rllib_checkpoint/')
+parser.add_argument('--hills', dest='hills', action='store_true', help='If true, set pollution level and height to simulate a hilly, relatively low pollution region.')
 parser.add_argument('-n', '--num_agents', dest='num_agents', type=int, default=1)
 parser.add_argument('-m', '--map_size', dest='map_size', type=int, default=4)
 parser.add_argument('-r', '--reinit_agents', action='store_true')
@@ -30,17 +30,23 @@ args = parser.parse_args()
 env_config = {
     'num_agents': args.num_agents,
     'map_size': args.map_size,
-    'num_iters': args.num_agents * np.hypot(args.map_size, args.map_size),
+    'num_iters': args.num_agents * args.map_size * args.map_size,
     'reinit_agents': args.reinit_agents,
     'fit_split': 3,
     'corners': True,
-    'hill_attrs': [
-                    [[10,5], 10, 4],
-                    [[7,12], 20, 10],
-                    [[15,13], 15, 6],
-                  ]
     # 'render_mode': 'human'
 }
+
+if args.hills:
+    env_config['hill_attrs'] =  [
+                    [[5,2], 4, 2],
+                    [[3,6], 7, 3],
+                ]
+    env_config['poll_attrs'] = [
+                    [[0,2], 7, 2],
+                    [[0,7], 5, 2],
+                    [[7,6], 6, 2],
+                ]
 
 raw_env = AsyncMapEnv(**env_config)
 env = PettingZooEnv(raw_env)

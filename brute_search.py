@@ -35,6 +35,9 @@ class SearchTree:
         self.pollutions = {agent: 0 for agent in self.env.possible_agents}
 
     def build_tree(self, velocities=[0,1], verbose=0):
+        if type(velocities) != list:
+            self.default_vel = velocities
+            velocities = [-1]
         for agent in self.env.possible_agents:
             start = self.env.positions[agent]
             goal = self.env.goals[agent]
@@ -71,8 +74,12 @@ class SearchTree:
         length = nx.get_edge_attributes(self.env.G, 'l')[(parent.id, child_id)]
         amb_pol = nx.get_edge_attributes(self.env.G, 'pollution')[(parent.id, child_id)]
 
-        power = child_cyclist.get_segment_power(d_height=dh, l=length, v=self.env._act_to_vel(vel, child_cyclist.fitness)/3.6)
-        pollution = child_cyclist.eval_segment(amb_pol, power, length*3.6/self.env._act_to_vel(vel, child_cyclist.fitness))
+        if vel in {0,1}:
+            power = child_cyclist.get_segment_power(d_height=dh, l=length, v=self.env._act_to_vel(vel, child_cyclist.fitness)/3.6)
+            pollution = child_cyclist.eval_segment(amb_pol, power, length*3.6/self.env._act_to_vel(vel, child_cyclist.fitness))
+        else:
+            power = child_cyclist.get_segment_power(d_height=dh, l=length, v=self.default_vel/3.6)
+            pollution = child_cyclist.eval_segment(amb_pol, power, length*3.6/self.default_vel)
 
         child = Node(child_id, parent.pollution+pollution, child_cyclist, vel)
         parent.children.append(child)

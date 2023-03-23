@@ -32,20 +32,29 @@ def make_landscape(map_size, hill_params):
         Z += hill_create(map_size, height, width, np.array(centre))
     return Z
 
-route_dict = {
-              'cyclist_0': [(0, None), (8, 1), (9, 1), (17, 1), (18, 1), (26, 1), (34, 1), (42, 1), (43, 1), (51, 1), (52, 1), (53, 1), (54, 1), (62, 1), (63, 1)],
-              'cyclist_1': [(0, None), (8, 1), (9, 1), (17, 1), (18, 1), (26, 1), (34, 1), (42, 1), (43, 1), (51, 1), (52, 1), (53, 1), (54, 1), (62, 1), (63, 1)]
-             }
+# --- 7x7 OPTIMA, 50 HILL & POLLUTION RAMP
+# route_dict = {'cyclist_0': [[(0, None), (1, -1), (2, -1), (3, -1), (4, -1), (5, -1), (12, -1), (19, -1), (26, -1), (33, -1), (40, -1), (47, -1), (48, -1)], 1], 'cyclist_1': [[(0, None), (1, -1), (2, -1), (3, -1), (4, -1), (11, -1), (18, -1), (25, -1), (32, -1), (39, -1), (46, -1), (47, -1), (48, -1)], 1]}
+# pollutions = {'cyclist_0': 0.1826340571736291, 'cyclist_1': 0.0788964955843816}
+
+# --- 8x8 OPTIMA, 50 HILL & POLLUTION RAMP
+route_dict = {'less fit cyclist': [[(0, None), (1, -1), (2, -1), (3, -1), (4, -1), (5, -1), (13, -1), (21, -1), (29, -1), (37, -1), (45, -1), (53, -1), (61, -1), (62, -1), (63, -1)], 1], 'fitter cyclist': [[(0, None), (1, -1), (2, -1), (3, -1), (11, -1), (12, -1), (20, -1), (28, -1), (36, -1), (44, -1), (52, -1), (60, -1), (61, -1), (62, -1), (63, -1)], 1]}
+# pollutions = {'cyclist_0': 0.20252626233171678, 'cyclist_1': 0.08210437610887333}
+
+# route_dict = {'cyclist_1': [[(62, 1), (1, 0), (9, 0), (10, 1), (11, 1), (12, 0), (13, 1), (21, 0), (13, 1), (21, 0), (13, 1), (21, 0), (13, 1), (21, 0), (13, 1), (21, 0), (13, 1), (21, 0), (13, 1), (21, 0), (13, 1), (21, 0), (13, 1), (21, 0), (13, 1), (21, 0), (13, 1), (21, 0), (13, 1), (21, 0), (13, 1), (21, 0), (13, 1), (21, 0), (13, 1), (21, 0), (13, 1), (21, 0), (13, 1), (21, 0), (13, 1), (21, 0), (13, 1), (21, 0), (13, 1), (21, 0), (13, 1), (21, 0), (13, 1), (21, 0), (13, 1), (21, 0), (13, 1), (21, 0), (13, 1), (21, 0), (13, 1), (21, 0), (13, 1), (21, 0), (13, 1)], 0], 'cyclist_0': [[(1, 0), (9, 0), (10, 1), (11, 1), (12, 1), (13, 1), (21, 0), (13, 1), (21, 0), (13, 1), (21, 0), (13, 1), (21, 0), (13, 1), (21, 0), (13, 1), (21, 0), (13, 1), (21, 0), (13, 1), (21, 0), (13, 1), (21, 0), (13, 1), (21, 0), (13, 1), (21, 0), (13, 1), (21, 0), (13, 1), (21, 0), (13, 1), (21, 0), (13, 1), (21, 0), (13, 1), (21, 0), (13, 1), (21, 0), (13, 1), (21, 0), (13, 1), (21, 0), (13, 1), (21, 0), (13, 1), (21, 0), (13, 1), (21, 0), (13, 1), (21, 0), (13, 1), (21, 0), (13, 1), (21, 0), (13, 1), (21, 0), (13, 1), (21, 0), (13, 1), (21, 0), (13, 1), (21, 0), (13, 1), (21, 0), (13, 1), (21, 0)], 0]}
 
 map_size = 8
+plt_map_size = 8
+
+
 map_ax = [i for i in range(map_size)]
 X, Y = np.meshgrid(map_ax, map_ax)
 np.random.seed(0)
 
 # hills = [x, y], height, width
 hill_attrs =  [
-                [[5,2], 4, 2],
-                [[3,6], 7, 3],
+                # [[5,2], 4, 2],
+                # [[3,6], 7, 3],
+                [[3, 3], 50, 2],
               ]
 poll_attrs = [
                 [[0,2], 7, 2],
@@ -62,25 +71,33 @@ pollmap *= 25
 for i in range(2):
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
+
     if i == 0:
-        ax.plot_surface(X, Y, pollmap, cmap='viridis', edgecolor='none')
+        plt_map = pollmap
+        print('\nMean pollution:', end="\t")
     else:
-        ax.plot_surface(X, Y, heightmap, cmap='Greys_r', edgecolor='none')
+        plt_map = heightmap
+        print('\nMean height:', end="\t")
+        
+    ax.plot_surface(X, Y, plt_map, cmap='Greys_r', edgecolor='none')
 
     mapping = np.array([x for x in range(map_size**2)]).reshape(map_size, map_size)
     colours = {
-                'cyclist_0': 'tab:red',
-                'cyclist_1': 'tab:blue',
+                'less fit cyclist': 'tab:red',
+                'fitter cyclist': 'tab:blue',
             }
     for agent, route in route_dict.items():
         route_x = []
         route_y = []
         route_z = []
-        for d, v in route:
-            route_y.append(d // map_size)
-            route_x.append(d % map_size)
-            route_z.append(heightmap[d // map_size, d % map_size])
-        ax.plot3D(route_x, route_y, route_z, colours[agent], zorder=10)
+        for d, v in route[0]:
+            route_y.append(d // plt_map_size)
+            route_x.append(d % plt_map_size)
+            route_z.append(plt_map[d // plt_map_size, d % plt_map_size])
+        print(f'{agent} {np.mean(route_z)}', end="\t")
+        ax.plot3D(route_x, route_y, route_z, colours[agent], zorder=10, label=f'{agent}')
+
     plt.xlabel('x')
     plt.ylabel('y')
+    plt.legend()
 plt.show()

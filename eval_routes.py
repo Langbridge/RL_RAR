@@ -21,21 +21,28 @@ parser.add_argument('checkpoint', type=int)
 parser.add_argument('--path', dest='path', type=str, default='/tmp/rllib_checkpoint/')
 parser.add_argument('-n', '--num_agents', dest='num_agents', type=int, default=1)
 parser.add_argument('-m', '--map_size', dest='map_size', type=int, default=4)
+parser.add_argument('-v', '--const_vel', dest='const_vel', action='store_true')
 parser.add_argument('-r', '--reinit_agents', action='store_true')
 args = parser.parse_args()
 
 env_config = {
     'num_agents': args.num_agents,
     'map_size': args.map_size,
-    'num_iters': args.num_agents * np.hypot(args.map_size, args.map_size),
+    'num_iters': args.num_agents * args.map_size * args.map_size,
     'reinit_agents': args.reinit_agents,
     'congestion': True,
     'corners': True,
     'fit_split': 2,
     'hill_attrs': [
-                    [[5,2], 4, 2],
-                    [[3,6], 7, 3],
+                    # [[5,2], 4, 2],
+                    # [[3,6], 7, 3],
+                    [[3, 3], 50, 2],
                   ],
+    'poll_attrs': [
+                [[0,2], 7, 2],
+                [[0,7], 5, 2],
+                [[7,6], 6, 2],
+              ],
     # 'render_mode': 'human',
     'figpath': 'figures/img',
 }
@@ -52,14 +59,22 @@ if args.checkpoint:
     truncations = {
         agent: False for agent in env.env.possible_agents
     }
+    env.env.positions = {
+            agent: 0 for agent in env.env.agents
+        }
+    env.env.goals = {
+            agent: env.env.num_nodes-1 for agent in env.env.agents
+        }
+    print(env.env.positions, env.env.goals)
 
-    # brute force optimal (non-congested) route
-    search = SearchTree(env.env)
-    search.build_tree()
-    optimal_polls = search.pollutions
-    optimal_routes = search.routes
+    # # brute force optimal (non-congested) route
+    # search = SearchTree(env.env)
+    # search.build_tree()
+    # optimal_polls = search.pollutions
+    # optimal_routes = search.routes
 
     policy_paths = defaultdict(list)
+
     while not any(truncations.values()): # until truncation
         curr_agent = env.env.agent_selection
         batch_obs = space_utils.flatten_to_single_ndarray(obs[curr_agent])
@@ -68,13 +83,14 @@ if args.checkpoint:
 
         obs, rewards, terminations, truncations, infos = env.step({curr_agent: action})
 
-    for agent in policy_paths:
-        poll_optimality[agent].append(search.pollutions[agent] / env.env.pollution[agent])
+    # for agent in policy_paths:
+    #     poll_optimality[agent].append(search.pollutions[agent] / env.env.pollution[agent])
 
-    pprint(optimal_routes)
-    pprint(policy_paths)
-    pprint(poll_optimality)
-    print(np.mean([poll_optimality[i] for i in poll_optimality.keys()]))
+    # pprint(optimal_routes)
+    print(policy_paths)
+    print(env.env.pollution)
+    # pprint(poll_optimality)
+    # print(np.mean([poll_optimality[i] for i in poll_optimality.keys()]))
 
 else:
     raw_env.positions = {
@@ -88,8 +104,12 @@ else:
 
     # brute force optimal (non-congested) route
     search = SearchTree(raw_env)
-    search.build_tree(verbose=1)
+    if args.const_vel:
+        search.build_tree(verbose=1, velocities=25)
+    else:
+        search.build_tree(verbose=1)
     optimal_polls = search.pollutions
     optimal_routes = search.routes
+
     print(optimal_routes)
     print(optimal_polls)

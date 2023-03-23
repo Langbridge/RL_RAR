@@ -1,4 +1,4 @@
-from aec_env import AsyncMapEnv
+from aec_env import AsyncMapEnv, AsyncMapEnv_NoVel
 
 from pprint import pprint
 
@@ -14,7 +14,7 @@ import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument('num_iters', type=int, help='Number of iterations to train for.')
 parser.add_argument('-c', '--constant', dest='constant', action='store_true', help='If true, set pollution level and height of all edges to the same value for deterministic routing.')
-parser.add_argument('-h', '--hills', dest='hills', action='store_true', help='If true, set pollution level and height to simulate a hilly, relatively low pollution region.')
+parser.add_argument('--hills', dest='hills', action='store_true', help='If true, set pollution level and height to simulate a hilly, relatively low pollution region.')
 parser.add_argument('-n', '--num_agents', dest='num_agents', type=int, default=10, help='Number of agents to initialise the environment with.')
 parser.add_argument('-m', '--map_size', dest='map_size', type=int, default=4, help='Map size to test on (note this is the sqrt of number of nodes in the graph).')
 parser.add_argument('-r', '--reinit_agents', action='store_true')
@@ -23,8 +23,9 @@ args = parser.parse_args()
 env_config = {
     'num_agents': args.num_agents,
     'map_size': args.map_size,
-    'num_iters': args.num_agents * np.hypot(args.map_size, args.map_size),
+    'num_iters': args.num_agents * args.map_size * args.map_size,
     'reinit_agents': args.reinit_agents,
+    'fit_split': 2,
 }
 
 
@@ -35,8 +36,9 @@ if __name__ == "__main__":
         env_config['const_graph'] = True
     elif args.hills:
         env_config['hill_attrs'] =  [
-                        [[5,2], 4, 2],
-                        [[3,6], 7, 3],
+                        # [[5,2], 4, 2],
+                        # [[3,6], 7, 3],
+                        [[3, 3], 50, 2],
                     ]
         env_config['poll_attrs'] = [
                         [[0,2], 7, 2],
@@ -44,7 +46,7 @@ if __name__ == "__main__":
                         [[7,6], 6, 2],
                     ]
 
-    env_creator = lambda config: AsyncMapEnv(**config)
+    env_creator = lambda config: AsyncMapEnv_NoVel(**config)
     register_env('simple', lambda config: PettingZooEnv(env_creator(config)))
 
     stop = {'training_iteration': args.num_iters}
