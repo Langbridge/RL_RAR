@@ -47,7 +47,7 @@ def make_landscape(map_size, hill_params):
 
 
 class AsyncMapEnv(AECEnv):
-    velocity = 20
+    velocity = 25
     large_const = 1e3
     params = {
         'pollution': -50,
@@ -423,7 +423,7 @@ class AsyncMapEnv(AECEnv):
                 plt.close()
 
 class AsyncMapEnv_NoVel(AECEnv):
-    velocity = 20
+    velocity = 25
     large_const = 1e3
     params = {
         'pollution': -50,
