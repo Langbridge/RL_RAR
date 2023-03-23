@@ -361,12 +361,12 @@ class AsyncMapEnv(AECEnv):
         #     return observation
         
     def _power_map(self):
-        # dh = nx.attr_matrix(self.G, edge_attr='dh')[0]
-        # l = nx.attr_matrix(self.G, edge_attr='l')[0]
-        # res = np.zeros_like(dh)
-        # np.divide(dh, l, out=res, where=(l > 0))
-        # return np.nan_to_num(res)
-        return nx.attr_matrix(self.G, edge_attr='dh')[0]
+        dh = nx.attr_matrix(self.G, edge_attr='dh')[0]
+        l = nx.attr_matrix(self.G, edge_attr='l')[0]
+        res = np.zeros_like(dh)
+        np.divide(dh, l, out=res, where=(l > 0))
+        return np.nan_to_num(res)
+        # return nx.attr_matrix(self.G, edge_attr='dh')[0]
 
     def _pollution_map(self):
         return nx.attr_matrix(self.G, edge_attr='pollution')[0]
@@ -722,12 +722,12 @@ class AsyncMapEnv_NoVel(AECEnv):
             return self.large_const, 0
         
     def _power_map(self):
-        # dh = nx.attr_matrix(self.G, edge_attr='dh')[0]
-        # l = nx.attr_matrix(self.G, edge_attr='l')[0]
-        # res = np.zeros_like(dh)
-        # np.divide(dh, l, out=res, where=(l > 0))
-        # return np.nan_to_num(res)
-        return nx.attr_matrix(self.G, edge_attr='dh')[0]
+        dh = nx.attr_matrix(self.G, edge_attr='dh')[0]
+        l = nx.attr_matrix(self.G, edge_attr='l')[0]
+        res = np.zeros_like(dh)
+        np.divide(dh, l, out=res, where=(l > 0))
+        return np.nan_to_num(res)
+        # return nx.attr_matrix(self.G, edge_attr='dh')[0]
 
     def _pollution_map(self):
         return nx.attr_matrix(self.G, edge_attr='pollution')[0]
