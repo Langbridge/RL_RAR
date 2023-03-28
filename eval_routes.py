@@ -1,7 +1,7 @@
 import numpy as np
 from ray.rllib.env import PettingZooEnv, ParallelPettingZooEnv
 from ray.rllib.utils.spaces import space_utils
-from aec_env import AsyncMapEnv
+from aec_env import AsyncMapEnv, AsyncMapEnv_NoVel
 
 from ray.rllib.policy.policy import Policy
 from ray.rllib.algorithms.algorithm import Algorithm
@@ -46,8 +46,10 @@ env_config = {
     # 'render_mode': 'human',
     'figpath': 'figures/img',
 }
-
-raw_env = AsyncMapEnv(**env_config)
+if args.const_vel:
+    raw_env = AsyncMapEnv_NoVel(**env_config)
+else:
+    raw_env = AsyncMapEnv(**env_config)
 env = PettingZooEnv(raw_env)
 
 if args.checkpoint:
