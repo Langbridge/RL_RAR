@@ -18,6 +18,7 @@ parser.add_argument('--hills', dest='hills', action='store_true', help='If true,
 parser.add_argument('-n', '--num_agents', dest='num_agents', type=int, default=10, help='Number of agents to initialise the environment with.')
 parser.add_argument('-m', '--map_size', dest='map_size', type=int, default=4, help='Map size to test on (note this is the sqrt of number of nodes in the graph).')
 parser.add_argument('-r', '--reinit_agents', action='store_true')
+parser.add_argument('--corners', action='store_true')
 args = parser.parse_args()
 
 env_config = {
@@ -26,8 +27,8 @@ env_config = {
     'num_iters': args.num_agents * args.map_size * args.map_size,
     'reinit_agents': args.reinit_agents,
     'fit_split': 2,
+    'corners': args.corners,
 }
-
 
 if __name__ == "__main__":
     ray.init()
@@ -58,6 +59,7 @@ if __name__ == "__main__":
                 ),
             param_space=(
                 ppo.PPOConfig()
+                .training(entropy_coeff_schedule=[[0, 0.1],[500, 0.05],[1500, 0.01], [2500, 0.0]], gamma=0.98)
                 .environment(env='simple', env_config=env_config)
                 .rollouts()
                 .framework('torch')

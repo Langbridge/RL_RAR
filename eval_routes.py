@@ -45,7 +45,6 @@ env_config = {
     # 'render_mode': 'human',
     'figpath': 'figures/img',
 }
-
 if args.const_vel:
     raw_env = AsyncMapEnv_NoVel(**env_config)
 else:

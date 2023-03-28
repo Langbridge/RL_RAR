@@ -1,7 +1,7 @@
 import numpy as np
 from ray.rllib.env import PettingZooEnv, ParallelPettingZooEnv
 from ray.rllib.utils.spaces import space_utils
-from aec_env import AsyncMapEnv
+from aec_env import AsyncMapEnv, AsyncMapEnv_NoVel
 
 from ray.rllib.policy.policy import Policy
 from ray.rllib.algorithms.algorithm import Algorithm
@@ -25,6 +25,7 @@ parser.add_argument('--hills', dest='hills', action='store_true', help='If true,
 parser.add_argument('-n', '--num_agents', dest='num_agents', type=int, default=1)
 parser.add_argument('-m', '--map_size', dest='map_size', type=int, default=4)
 parser.add_argument('-r', '--reinit_agents', action='store_true')
+parser.add_argument('-v', '--velocity', action='store_true')
 args = parser.parse_args()
 
 env_config = {
@@ -32,7 +33,7 @@ env_config = {
     'map_size': args.map_size,
     'num_iters': args.num_agents * args.map_size * args.map_size,
     'reinit_agents': args.reinit_agents,
-    'fit_split': 3,
+    'fit_split': 2,
     'corners': True,
     # 'render_mode': 'human'
 }
@@ -47,8 +48,10 @@ if args.hills:
                     [[0,7], 5, 2],
                     [[7,6], 6, 2],
                 ]
-
-raw_env = AsyncMapEnv(**env_config)
+if args.velocity:
+    raw_env = AsyncMapEnv(**env_config)
+else:
+    raw_env = AsyncMapEnv_NoVel(**env_config)
 env = PettingZooEnv(raw_env)
 
 for c in range(args.start, args.checkpoint+1, args.step):
