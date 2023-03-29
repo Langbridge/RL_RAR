@@ -427,8 +427,8 @@ class AsyncMapEnv_NoVel(AECEnv):
     large_const = 1e3
     params = {
         'pollution': -50,
-        'neighbourhood': -0.005,
-        'goal': 1,
+        'neighbourhood': -0.01,
+        'goal': 10,
     }
     vel_reference = { # low and high velocities in kph for three fitness levels
         0: {0: 10, 1: 20},
@@ -437,7 +437,7 @@ class AsyncMapEnv_NoVel(AECEnv):
     }
     metadata = {}
 
-    def __init__(self, map_size=5, num_agents=2, reinit_agents=False, num_iters=None, const_graph=False, congestion=True, hill_attrs=[], poll_attrs=[], corners=False, fit_split=3, render_mode=None, figpath='figures'):
+    def __init__(self, map_size=5, num_agents=2, reinit_agents=False, num_iters=None, const_graph=False, congestion=True, hill_attrs=[], poll_attrs=[], corners=False, fit_split=3, goal_scheduling=False, render_mode=None, figpath='figures'):
         """
         The init method takes in environment arguments and should define the following attributes:
         - possible_agents
@@ -498,6 +498,9 @@ class AsyncMapEnv_NoVel(AECEnv):
 
         self.timestep = None
         self.possible_agents = ["cyclist_" + str(r) for r in range(num_agents)]
+
+        self.goal_scheduling = goal_scheduling
+        self.global_iters = -5 # deal with Ray setup
 
         # implement specification of cyclist fitnesses
         if fit_split == 2:
@@ -574,9 +577,20 @@ class AsyncMapEnv_NoVel(AECEnv):
                 agent: random.sample(self.corner_list, 2) for agent in self.agents
             }
         else:
-            tasks = {
-                agent: random.sample(self.G.nodes(), 2) for agent in self.agents
-            }
+            if self.goal_scheduling:
+                k = max(1, int(2+(self.global_iters//3-500)/500))
+                tasks = {
+                    agent: random.sample(self.G.nodes(), 2) for agent in self.agents
+                }
+                for agent in self.agents:
+                    nodes = nx.ego_graph(self.G, tasks[agent][0], radius=k).nodes()
+                    tasks[agent][1] = tasks[agent][0]
+                    while tasks[agent][0] == tasks[agent][1]:
+                        tasks[agent][1] = random.sample(nodes, 1)[0]
+            else:
+                tasks = {
+                    agent: random.sample(self.G.nodes(), 2) for agent in self.agents
+                }
         self.positions = {
             agent: tasks[agent][0] for agent in self.agents
         }
@@ -613,8 +627,7 @@ class AsyncMapEnv_NoVel(AECEnv):
             agent: False for agent in self.agents
         }
 
-        heuristic = {agent: nx.shortest_path_length(self.G, target=self.goals[agent])
-                     for agent in self.agents}
+        heuristic = {agent: nx.shortest_path_length(self.G, target=self.goals[agent]) for agent in self.agents}
 
         node_attrs = {
             i:
@@ -633,6 +646,7 @@ class AsyncMapEnv_NoVel(AECEnv):
             self.render()
 
         self.infos = {agent: {} for agent in self.agents}
+        self.global_iters += 1
 
         # return self.observations, self.infos
 
@@ -738,8 +752,8 @@ class AsyncMapEnv_NoVel(AECEnv):
         return nx.attr_matrix(self.G, edge_attr='pollution')[0]
         
     def _get_reward(self, pollution, neighbourhood, at_goal):
-        # return self.params['pollution']*pollution + self.params['goal']*int(at_goal)
-        return self.params['pollution']*pollution + self.params['neighbourhood']*neighbourhood + self.params['goal']*int(at_goal)
+        return self.params['pollution']*pollution + self.params['goal']*int(at_goal)
+        # return self.params['pollution']*pollution + self.params['neighbourhood']*neighbourhood + self.params['goal']*int(at_goal)
 
     def _one_hot(self, idx):
         arr = np.zeros(shape=(self.num_nodes,), dtype=int)
@@ -789,22 +803,23 @@ if __name__ == "__main__":
         'map_size': 10,
         'num_iters': 1_000,
         'fit_split': 3,
-        'corners': True,
+        'corners': False,
         'hill_attrs': [
                         [[10,5], 10, 4],
                         [[7,12], 20, 10],
                         [[15,13], 15, 6],
-                      ]
+                      ],
+        'goal_scheduling': True,
         # 'render_mode': 'human',
         # 'figpath': None,
     }
 
     # --- ENV TESTING
-    env = AsyncMapEnv(**env_config)
+    env = AsyncMapEnv_NoVel(**env_config)
     env.reset()
     # pprint(env.agent_name_mapping)
-    # print(env.positions)
-    # print(env.goals)
+    print(env.positions)
+    print(env.goals)
     # print(env.observations[env.agent_selection])
 
     # ctr = 0

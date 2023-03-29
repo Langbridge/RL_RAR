@@ -19,7 +19,10 @@ parser.add_argument('-n', '--num_agents', dest='num_agents', type=int, default=1
 parser.add_argument('-m', '--map_size', dest='map_size', type=int, default=4, help='Map size to test on (note this is the sqrt of number of nodes in the graph).')
 parser.add_argument('-r', '--reinit_agents', action='store_true')
 parser.add_argument('--corners', action='store_true')
+parser.add_argument('--goal_scheduling', action='store_true')
 args = parser.parse_args()
+
+assert not(args.corners and args.goal_scheduling), "Conflicting --corners and --goal_scheduling arguments."
 
 env_config = {
     'num_agents': args.num_agents,
@@ -28,6 +31,7 @@ env_config = {
     'reinit_agents': args.reinit_agents,
     'fit_split': 2,
     'corners': args.corners,
+    'goal_scheduling': args.goal_scheduling,
 }
 
 if __name__ == "__main__":
