@@ -427,7 +427,7 @@ class AsyncMapEnv_NoVel(AECEnv):
     large_const = 1e3
     params = {
         'pollution': -50,
-        'neighbourhood': -0.05,
+        'neighbourhood': -0.005,
         'goal': 1,
     }
     vel_reference = { # low and high velocities in kph for three fitness levels
@@ -545,7 +545,7 @@ class AsyncMapEnv_NoVel(AECEnv):
         agent, duration = self.agent_queue.peekitem()
         return agent
     
-    def reset(self, seed=None, return_info=False, options=None):
+    def reset(self, seed=None, test=False, return_info=False, options=None):
         if seed:
             random.seed(seed)
 
@@ -565,7 +565,11 @@ class AsyncMapEnv_NoVel(AECEnv):
         self.agent_selection = self.agent_selector()
 
         self.timestep = 0
-        if self.corners:
+        if test:
+            tasks = {
+                agent: [0, self.num_nodes-1] for agent in self.agents
+            }
+        elif self.corners:
             tasks = {
                 agent: random.sample(self.corner_list, 2) for agent in self.agents
             }
@@ -657,7 +661,8 @@ class AsyncMapEnv_NoVel(AECEnv):
         else: # if invalid move, don't move agent
             self.state[agent] = None
             pollution, duration = self._get_pollution(agent, action['destination'], self.velocity)
-            self.rewards[agent] = self._get_reward(pollution, 0, False)
+            heuristic = nx.get_node_attributes(self.G, name=f'heur_{agent}')[action['destination']]
+            self.rewards[agent] = self._get_reward(pollution, heuristic, False)
             # self.pollution[agent] += pollution
 
         if self.render_mode:
@@ -733,8 +738,8 @@ class AsyncMapEnv_NoVel(AECEnv):
         return nx.attr_matrix(self.G, edge_attr='pollution')[0]
         
     def _get_reward(self, pollution, neighbourhood, at_goal):
-        # return self.params['pollution']*pollution + self.params['neighbourhood']*neighbourhood + self.params['goal']*int(at_goal)
-        return self.params['pollution']*pollution + self.params['goal']*int(at_goal)
+        # return self.params['pollution']*pollution + self.params['goal']*int(at_goal)
+        return self.params['pollution']*pollution + self.params['neighbourhood']*neighbourhood + self.params['goal']*int(at_goal)
 
     def _one_hot(self, idx):
         arr = np.zeros(shape=(self.num_nodes,), dtype=int)
