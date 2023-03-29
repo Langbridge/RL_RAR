@@ -32,6 +32,10 @@ def make_landscape(map_size, hill_params):
         Z += hill_create(map_size, height, width, np.array(centre))
     return Z
 
+# ---- SHORTEST PATH
+# route_dict = [0, 1, 9, 17, 25, 33, 41, 49, 50, 51, 52, 53, 54, 62, 63]
+# pollutions = {'cyclist_0': 0.6896100808767057, 'cyclist_1': 0.2563466629830288}
+
 # --- 7x7 OPTIMA, 50 HILL & POLLUTION RAMP
 # route_dict = {'cyclist_0': [[(0, None), (1, -1), (2, -1), (3, -1), (4, -1), (5, -1), (12, -1), (19, -1), (26, -1), (33, -1), (40, -1), (47, -1), (48, -1)], 1], 'cyclist_1': [[(0, None), (1, -1), (2, -1), (3, -1), (4, -1), (11, -1), (18, -1), (25, -1), (32, -1), (39, -1), (46, -1), (47, -1), (48, -1)], 1]}
 # pollutions = {'cyclist_0': 0.1826340571736291, 'cyclist_1': 0.0788964955843816}

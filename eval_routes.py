@@ -6,8 +6,7 @@ from aec_env import AsyncMapEnv, AsyncMapEnv_NoVel
 from ray.rllib.policy.policy import Policy
 from ray.rllib.algorithms.algorithm import Algorithm
 import imageio.v2 as imageio
-import os
-import glob
+import networkx as nx
 
 from collections import defaultdict
 from copy import deepcopy
@@ -103,9 +102,22 @@ else:
         }
     print(raw_env.positions, raw_env.goals)
     pprint(raw_env.agent_name_mapping)
+    search = SearchTree(raw_env)
+
+    # calculate shortest path
+    short_path = nx.shortest_path(raw_env.G, source=0, target=raw_env.num_nodes-1, weight='l')
+    print(short_path)
+    ptrs = {
+            agent: 1 for agent in raw_env.agents
+        }
+    while len([i for i in ptrs.values() if i < len(short_path)]) > 0:
+        curr_agent = env.env.agent_selection
+        env.step({curr_agent: {'destination': short_path[ptrs[curr_agent]]}})
+        print({curr_agent: {'destination': short_path[ptrs[curr_agent]]}})
+        ptrs[curr_agent] += 1
+    print(env.env.pollution)
 
     # brute force optimal (non-congested) route
-    search = SearchTree(raw_env)
     if args.const_vel:
         search.build_tree(verbose=1, velocities=25)
     else:

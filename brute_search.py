@@ -30,7 +30,7 @@ class Node:
 class SearchTree:
     def __init__(self, env):
         self.routes = {}
-        self.env = env
+        self.env = deepcopy(env)
 
         self.pollutions = {agent: 0 for agent in self.env.possible_agents}
 

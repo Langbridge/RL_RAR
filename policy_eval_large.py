@@ -40,8 +40,9 @@ env_config = {
 
 if args.hills:
     env_config['hill_attrs'] =  [
-                    [[5,2], 4, 2],
-                    [[3,6], 7, 3],
+                    # [[5,2], 4, 2],
+                    # [[3,6], 7, 3],
+                    [[3, 3], 50, 2],
                 ]
     env_config['poll_attrs'] = [
                     [[0,2], 7, 2],
