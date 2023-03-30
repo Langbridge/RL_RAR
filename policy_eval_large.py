@@ -59,6 +59,7 @@ for c in range(args.start, args.checkpoint+1, args.step):
     chkpt = f'{args.path}checkpoint_{str(c).zfill(6)}'
     print(chkpt)
     restored_policy = Policy.from_checkpoint(chkpt)
+    env.env.global_iters = c*3
 
     length = defaultdict(list)
     tot_reward = defaultdict(list)

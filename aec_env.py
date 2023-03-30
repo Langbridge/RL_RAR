@@ -172,6 +172,8 @@ class AsyncMapEnv(AECEnv):
     def reset(self, seed=None, return_info=False, options=None):
         if seed:
             random.seed(seed)
+        if options == None:
+            options = {'test': False}
 
         self.agents = self.possible_agents[:]
         if self.reinit_agents:
@@ -189,7 +191,11 @@ class AsyncMapEnv(AECEnv):
         self.agent_selection = self.agent_selector()
 
         self.timestep = 0
-        if self.corners:
+        if options['test']:
+            tasks = {
+                agent: [0, self.num_nodes-1] for agent in self.agents
+            }
+        elif self.corners:
             tasks = {
                 agent: random.sample(self.corner_list, 2) for agent in self.agents
             }
@@ -548,9 +554,11 @@ class AsyncMapEnv_NoVel(AECEnv):
         agent, duration = self.agent_queue.peekitem()
         return agent
     
-    def reset(self, seed=None, test=False, return_info=False, options=None):
+    def reset(self, seed=None, return_info=False, options=None):
         if seed:
             random.seed(seed)
+        if options == None:
+            options = {'test': False}
 
         self.agents = self.possible_agents[:]
         if self.reinit_agents:
@@ -568,7 +576,7 @@ class AsyncMapEnv_NoVel(AECEnv):
         self.agent_selection = self.agent_selector()
 
         self.timestep = 0
-        if test:
+        if options['test']:
             tasks = {
                 agent: [0, self.num_nodes-1] for agent in self.agents
             }

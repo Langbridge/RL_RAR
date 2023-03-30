@@ -32,19 +32,26 @@ env_config = {
     'congestion': True,
     'corners': True,
     'fit_split': 2,
+    # 'hill_attrs': [
+    #                 # [[5,2], 4, 2],
+    #                 # [[3,6], 7, 3],
+    #                 [[3, 3], 50, 2],
+    #               ],
+    # 'poll_attrs': [
+    #             [[0,2], 7, 2],
+    #             [[0,7], 5, 2],
+    #             [[7,6], 6, 2],
+    #           ],
     'hill_attrs': [
-                    # [[5,2], 4, 2],
-                    # [[3,6], 7, 3],
-                    [[3, 3], 50, 2],
+                    [[2, 2], 50, 1],
                   ],
     'poll_attrs': [
-                [[0,2], 7, 2],
-                [[0,7], 5, 2],
-                [[7,6], 6, 2],
+                [[0,0], 7, 1],
+                [[0,3], 5, 1],
+                [[3,3], 6, 1],
               ],
-    # 'render_mode': 'human',
-    'figpath': 'figures/img',
 }
+
 if args.const_vel:
     raw_env = AsyncMapEnv_NoVel(**env_config)
 else:
@@ -56,16 +63,10 @@ if args.checkpoint:
     restored_policy = Policy.from_checkpoint(chkpt)
 
     poll_optimality = defaultdict(list)
-    obs, infos = env.reset()
+    obs, infos = env.reset(options={'test': True})
     truncations = {
         agent: False for agent in env.env.possible_agents
     }
-    env.env.positions = {
-            agent: 0 for agent in env.env.agents
-        }
-    env.env.goals = {
-            agent: env.env.num_nodes-1 for agent in env.env.agents
-        }
     print(env.env.positions, env.env.goals)
 
     # # brute force optimal (non-congested) route
@@ -75,6 +76,8 @@ if args.checkpoint:
     # optimal_routes = search.routes
 
     policy_paths = defaultdict(list)
+    for agent in env.env.agents:
+        policy_paths[agent].append((env.env.positions[agent],))
 
     while not any(truncations.values()): # until truncation
         curr_agent = env.env.agent_selection
@@ -94,28 +97,21 @@ if args.checkpoint:
     # print(np.mean([poll_optimality[i] for i in poll_optimality.keys()]))
 
 else:
-    raw_env.positions = {
-            agent: 0 for agent in raw_env.agents
-        }
-    raw_env.goals = {
-            agent: raw_env.num_nodes-1 for agent in raw_env.agents
-        }
-    print(raw_env.positions, raw_env.goals)
-    pprint(raw_env.agent_name_mapping)
+    raw_env.reset(options={'test': True})
     search = SearchTree(raw_env)
 
-    # calculate shortest path
-    short_path = nx.shortest_path(raw_env.G, source=0, target=raw_env.num_nodes-1, weight='l')
-    print(short_path)
-    ptrs = {
-            agent: 1 for agent in raw_env.agents
-        }
-    while len([i for i in ptrs.values() if i < len(short_path)]) > 0:
-        curr_agent = env.env.agent_selection
-        env.step({curr_agent: {'destination': short_path[ptrs[curr_agent]]}})
-        print({curr_agent: {'destination': short_path[ptrs[curr_agent]]}})
-        ptrs[curr_agent] += 1
-    print(env.env.pollution)
+    # # calculate shortest path
+    # short_path = nx.shortest_path(raw_env.G, source=0, target=raw_env.num_nodes-1, weight='l')
+    # print(short_path)
+    # ptrs = {
+    #         agent: 1 for agent in raw_env.agents
+    #     }
+    # while len([i for i in ptrs.values() if i < len(short_path)]) > 0:
+    #     curr_agent = env.env.agent_selection
+    #     env.step({curr_agent: {'destination': short_path[ptrs[curr_agent]]}})
+    #     print({curr_agent: {'destination': short_path[ptrs[curr_agent]]}})
+    #     ptrs[curr_agent] += 1
+    # print(env.env.pollution)
 
     # brute force optimal (non-congested) route
     if args.const_vel:
